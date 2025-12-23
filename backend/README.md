@@ -260,23 +260,4 @@ Error responses include detailed error messages:
 }
 ```
 
-## CORS
 
-The API is configured with permissive CORS settings for development. **Important**: Tighten CORS settings for production deployments.
-
-## Development
-
-### Running Tests
-
-[Add test instructions when tests are implemented]
-
-### Code Style
-
-Follow PEP 8 style guidelines. Consider using:
-- `black` for code formatting
-- `flake8` or `pylint` for linting
-- `mypy` for type checking
-
-## License
-
-[Add your license here]
