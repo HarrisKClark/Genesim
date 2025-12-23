@@ -1,0 +1,349 @@
+.circuit-canvas {
+  flex: 1;
+  position: relative;
+  background: #e8e8e8;
+  overflow: hidden; /* Keep hidden, scroll container handles overflow */
+  cursor: default;
+  border: 1px solid #bbb;
+  user-select: none; /* Prevent text selection to avoid interfering with DNA selection */
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+.circuit-canvas.panning {
+  cursor: grabbing;
+}
+
+.circuit-canvas.drag-over {
+  background: #d8e8f0;
+}
+
+/* Ensure react-dnd doesn't create blocking overlays */
+.circuit-canvas > div {
+  pointer-events: auto;
+}
+
+.canvas-scroll-container {
+  width: 100%;
+  height: 100%;
+  overflow-x: hidden !important; /* No horizontal scrollbar - use custom one */
+  overflow-y: hidden !important; /* No vertical scrollbar */
+  position: relative;
+  background: transparent !important;
+  /* Ensure scroll container doesn't block */
+  pointer-events: auto;
+  user-select: none; /* Prevent text selection */
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+/* Custom scrollbar for Webkit browsers (Chrome, Safari, Edge) */
+.canvas-scroll-container::-webkit-scrollbar {
+  -webkit-appearance: none !important; /* Remove default styling */
+  display: block !important; /* Force display */
+  width: 12px !important;
+  height: 12px !important;
+  background: #d4d4d4 !important;
+  border-left: 1px solid #888;
+  border-top: 1px solid #888;
+  /* Force scrollbar to always be visible */
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+.canvas-scroll-container::-webkit-scrollbar-track {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  background: #d4d4d4 !important;
+  border-left: 1px solid #888;
+  border-top: 1px solid #888;
+  /* Ensure track is always rendered */
+  -webkit-appearance: none !important;
+}
+
+.canvas-scroll-container::-webkit-scrollbar-thumb {
+  background: #4a90e2;
+  border: 1px solid #2d5aa0;
+  border-radius: 0; /* Square corners for technical look */
+  min-height: 30px;
+  min-width: 30px;
+}
+
+.canvas-scroll-container::-webkit-scrollbar-thumb:hover {
+  background: #3a7bc8;
+  border-color: #1e4a7a;
+}
+
+.canvas-scroll-container::-webkit-scrollbar-thumb:active {
+  background: #2d5aa0;
+  border-color: #1e4a7a;
+}
+
+.canvas-scroll-container::-webkit-scrollbar-corner {
+  background: #d4d4d4;
+  border-top: 1px solid #888;
+  border-left: 1px solid #888;
+}
+
+/* Make sure scroll container children don't create blocking layers */
+.canvas-scroll-container::before,
+.canvas-scroll-container::after {
+  display: none;
+}
+
+.canvas-inner-wrapper {
+  position: relative;
+  /* Don't block - only contain, no background */
+  background: transparent !important;
+  pointer-events: none !important;
+  /* Ensure it doesn't create a blocking box */
+  display: block;
+  /* Add padding at top to prevent content from being cut off when zoomed */
+  padding-top: 50px;
+  padding-bottom: 50px;
+  box-sizing: border-box;
+  user-select: none; /* Prevent text selection */
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+/* All children can receive pointer events */
+.canvas-inner-wrapper > * {
+  pointer-events: auto !important;
+}
+
+/* Ensure DNA sequence is always on top and visible */
+.dna-line,
+.dna-book {
+  position: absolute;
+  z-index: 1 !important;
+  pointer-events: auto !important;
+}
+
+/* Removed canvas-content-wrapper - no longer needed */
+
+.canvas-content {
+  pointer-events: none;
+  /* No background, no blocking - just a container for components */
+}
+
+.dna-line {
+  background: #4a90e2;
+  z-index: 1;
+  pointer-events: auto;
+}
+
+.dna-book {
+  font-family: 'Courier New', monospace;
+  z-index: 1;
+  position: relative;
+  pointer-events: auto;
+}
+
+.dna-line-row {
+  white-space: nowrap;
+}
+
+/* Top-right controls container */
+.top-right-controls {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 100;
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  background: rgba(212, 212, 212, 0.95);
+  border: 1px solid #888;
+  box-shadow: 1px 1px 4px rgba(0, 0, 0, 0.15);
+}
+
+.zoom-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  font-family: 'Courier New', monospace;
+  font-size: 10px;
+  color: #333;
+  text-transform: uppercase;
+  border-right: 1px solid #888;
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+.zoom-info .zoom-level {
+  font-weight: 700;
+  color: #000;
+}
+
+.zoom-info .view-mode {
+  padding: 2px 6px;
+  background: #4a90e2;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 600;
+}
+
+
+.zoom-buttons {
+  display: flex;
+  flex-direction: row;
+}
+
+.zoom-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 16px;
+  font-family: 'Courier New', monospace;
+  background: #4a90e2;
+  color: #fff;
+  border: none;
+  border-left: 1px solid #2d5aa0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  transition: background 0.1s;
+}
+
+.zoom-btn:hover {
+  background: #3a7bc8;
+}
+
+.zoom-btn:active {
+  background: #2d5aa0;
+}
+
+/* Legacy canvas-controls (kept for backwards compatibility) */
+.canvas-controls {
+  display: none;
+}
+
+.canvas-empty {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.empty-message {
+  color: #666;
+  font-size: 13px;
+  padding: 16px 24px;
+  background: #f5f5f5;
+  border: 1px solid #bbb;
+  border-radius: 0;
+  box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+  font-family: 'Courier New', monospace;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.empty-hint {
+  color: #888;
+  font-size: 11px;
+  font-family: 'Courier New', monospace;
+  text-transform: none;
+}
+
+/* Abstract component block styles */
+.abstract-component-block {
+  user-select: none;
+  transition: opacity 0.2s ease, box-shadow 0.2s ease, border 0.2s ease;
+}
+
+.abstract-component-block:hover:not(.selected):not(.dragging) {
+  box-shadow: 0 0 2px rgba(255, 255, 255, 0.3);
+}
+
+.abstract-component-block.selected {
+  border: 2px solid #fff !important;
+  box-shadow: 0 0 4px rgba(255, 255, 255, 0.5);
+}
+
+.abstract-component-block.dragging {
+  opacity: 0.8;
+  cursor: grabbing !important;
+  z-index: 3 !important;
+}
+
+.abstract-block-delete {
+  transition: background 0.2s ease, transform 0.1s ease;
+}
+
+.abstract-block-delete:hover {
+  background: #c0392b !important;
+  transform: scale(1.1);
+}
+
+/* Drag preview box styles */
+.drag-preview-box {
+  position: absolute;
+  pointer-events: none;
+  z-index: 1000;
+  border-radius: 2px;
+  transition: opacity 0.2s ease;
+}
+
+/* Gap indicator styles (handled inline in DNASequenceRenderer) */
+
+/* Bottom status bar */
+.canvas-status-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 24px;
+  background: rgba(180, 180, 180, 0.95);
+  border-top: 1px solid #888;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  gap: 8px;
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  color: #333;
+  z-index: 50;
+  user-select: none; /* Prevent text selection */
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+.status-filename {
+  font-weight: 600;
+  color: #000;
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+.status-separator {
+  color: #888;
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+
+.status-info {
+  color: #555;
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+}
+

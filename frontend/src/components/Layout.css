@@ -1,0 +1,46 @@
+.layout {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+  background: #e8e8e8;
+}
+
+.layout-content {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  overflow: hidden; /* Constrain to main panel */
+  min-height: 0;
+  position: relative;
+}
+
+.main-canvas-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+.results-toggle {
+  position: fixed;
+  bottom: 40px;
+  right: 20px;
+  padding: 8px 16px;
+  background: #4a5568;
+  color: white;
+  border: 1px solid #2d3748;
+  border-radius: 2px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 400;
+  font-family: 'Courier New', monospace;
+  z-index: 100;
+  transition: background 0.15s;
+}
+
+.results-toggle:hover {
+  background: #2d3748;
+}
+

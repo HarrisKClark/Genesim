@@ -1,0 +1,119 @@
+.circuit-node {
+  position: absolute;
+  min-width: 140px;
+  background: #f5f5f5;
+  border: 2px solid;
+  border-radius: 0;
+  box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+  cursor: move;
+  user-select: none;
+  transition: box-shadow 0.1s;
+  font-family: 'Courier New', monospace;
+}
+
+.circuit-node:hover {
+  box-shadow: 3px 3px 6px rgba(0, 0, 0, 0.25);
+}
+
+.circuit-node.selected {
+  box-shadow: 0 0 0 2px #4a90e2, 2px 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.circuit-node.dragging {
+  opacity: 0.7;
+  z-index: 1000;
+}
+
+.node-header {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  color: #000;
+  font-weight: 600;
+  font-size: 11px;
+  border-bottom: 1px solid #ccc;
+}
+
+.node-color-bar {
+  height: 3px;
+  width: 100%;
+}
+
+.node-name {
+  padding: 6px 8px;
+  background: #fff;
+  border-bottom: 1px solid #ddd;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.node-subtype {
+  padding: 4px 8px;
+  font-size: 9px;
+  color: #555;
+  background: #fafafa;
+  font-weight: 400;
+  text-transform: none;
+}
+
+.node-delete {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: #e74c3c;
+  border: 1px solid #c0392b;
+  color: white;
+  width: 18px;
+  height: 18px;
+  border-radius: 0;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.1s;
+  font-weight: 600;
+}
+
+.node-delete:hover {
+  background: #c0392b;
+}
+
+.node-body {
+  padding: 8px;
+  position: relative;
+  min-height: 30px;
+  background: #f5f5f5;
+}
+
+.node-input,
+.node-output {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: #666;
+  border: 2px solid #f5f5f5;
+  border-radius: 0;
+  cursor: crosshair;
+  transform: rotate(45deg);
+}
+
+.node-input {
+  left: -7px;
+  top: 50%;
+  transform: translateY(-50%) rotate(45deg);
+}
+
+.node-output {
+  right: -7px;
+  top: 50%;
+  transform: translateY(-50%) rotate(45deg);
+}
+
+.node-input:hover,
+.node-output:hover {
+  background: #4a90e2;
+  border-color: #2d5aa0;
+}
+
