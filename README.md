@@ -30,7 +30,6 @@ A web-based platform for designing and simulating genetic circuits with an intui
 ### User Interface
 - **Dual View Modes**: Switch between abstract parts view and detailed DNA sequence view
 - **Interactive Selection**: Click and drag to select DNA regions with visual highlighting
-- **Real-time Cursor**: Precise cursor positioning for DNA editing
 - **Results Visualization**: Interactive Plotly charts for mRNA and protein time-series
 - **Export Functionality**: Export simulation results and circuit designs
 
@@ -77,87 +76,9 @@ A web-based platform for designing and simulating genetic circuits with an intui
 - **Copy/Paste**: Use Ctrl+C / Ctrl+V (Cmd on Mac) to copy and paste DNA sequences
 - **Reverse Complement**: Right-click on selection for context menu options
 
-## Project Structure
-
-```
-genesim/
-├── backend/
-│   ├── app/
-│   │   ├── main.py          # FastAPI application
-│   │   ├── models.py        # Pydantic models
-│   │   └── simulate.py      # Simulation engine (RK4, Gillespie)
-│   ├── requirements.txt
-│   └── README.md
-├── frontend/
-│   ├── src/
-│   │   ├── components/      # React components
-│   │   ├── hooks/           # Custom React hooks
-│   │   ├── models/          # Data models
-│   │   ├── utils/           # Utility functions
-│   │   └── types/           # TypeScript types
-│   ├── package.json
-│   └── README.md
-└── README.md
-```
-
-## API Documentation
-
-The backend provides a RESTful API for circuit simulation:
-
-- `GET /api/health` - Health check endpoint
-- `POST /api/simulate/transcripts` - Run simulation on circuit design
-
-See the interactive API documentation at http://localhost:8000/docs when the backend is running.
-
-### Example API Request
-
-```json
-{
-  "transcripts": [
-    {
-      "promoterStrength": 10.0,
-      "rbsStrengths": [1.0],
-      "degradationRates": {"mRNA": 0.1, "protein": 0.01},
-      "inhibitorName": "LacI",
-      "hillK": 1.0,
-      "hillN": 2.0,
-      "leak": 0.01
-    }
-  ],
-  "params": {
-    "tEnd": 100.0,
-    "dt": 0.1,
-    "method": "deterministic"
-  }
-}
-```
-
-## Development
-
-### Frontend Development
-```bash
-cd frontend
-npm run dev        # Start dev server
-npm run build      # Build for production
-npm run lint       # Run linter
-```
-
-### Backend Development
-```bash
-cd backend
-source .venv/bin/activate
-uvicorn app.main:app --reload --port 8000
-```
-
-The frontend is configured to proxy API requests to `http://localhost:8000` during development.
-
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
-
-## License
-
-[Add your license here - e.g., MIT, Apache 2.0, etc.]
 
 ## Acknowledgments
 
