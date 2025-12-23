@@ -4,7 +4,7 @@ React + TypeScript frontend for the Genesim genetic circuit simulation platform.
 
 ## Features
 
-### 🧬 Circuit Design
+### Circuit Design
 - **Dual View Modes**: 
   - Abstract view: Visual representation of biological parts
   - DNA view: Detailed base-pair level sequence visualization
@@ -21,7 +21,7 @@ React + TypeScript frontend for the Genesim genetic circuit simulation platform.
 - **Custom Parts**: Create custom promoters with configurable parameters
 - **Operon Detection**: Automatic validation and highlighting of genetic operons
 
-### 📊 Simulation Interface
+### Simulation Interface
 - **Multiple Simulation Types**:
   - Deterministic (RK4 solver)
   - Stochastic (Gillespie SSA)
@@ -32,52 +32,13 @@ React + TypeScript frontend for the Genesim genetic circuit simulation platform.
   - Summary tables with final values
   - Histogram visualization for flow cytometry
 
-### 🛠️ DNA Editing
+### DNA Editing
 - **Selection**: Click and drag to select DNA regions
 - **Copy/Paste**: Standard keyboard shortcuts (Ctrl+C/Ctrl+V)
 - **Delete**: Remove selected DNA and overlapping components
 - **Reverse Complement**: Transform DNA sequences
 - **Undo/Redo**: Full undo/redo support
 
-## Getting Started
-
-### Prerequisites
-
-- **Node.js** 18 or higher
-- **npm** or **yarn**
-
-### Installation
-
-```bash
-cd frontend
-npm install
-```
-
-### Development
-
-Start the development server:
-
-```bash
-npm run dev
-```
-
-The application will be available at `http://localhost:3000`
-
-The frontend is configured to proxy API requests to `http://localhost:8000` (the backend server).
-
-### Building for Production
-
-```bash
-npm run build
-```
-
-The production build will be in the `dist/` directory.
-
-### Linting
-
-```bash
-npm run lint
-```
 
 ## Project Structure
 
@@ -152,43 +113,9 @@ Renders the DNA strand visualization:
 - **Plotly.js** - Data visualization
 - **CSS Modules** - Component styling
 
-## Configuration
-
-### Vite Proxy
-
-The development server is configured to proxy API requests:
-
-```typescript
-// vite.config.ts
-proxy: {
-  '/api': {
-    target: 'http://127.0.0.1:8000',
-    changeOrigin: true,
-  },
-}
-```
-
-### Environment Variables
-
-Create a `.env` file for environment-specific configuration:
-
-```env
-VITE_API_BASE_URL=http://localhost:8000
-```
-
-## Development Tips
-
-1. **Hot Module Replacement**: Vite provides instant HMR for fast development
-2. **TypeScript**: All components are fully typed for better IDE support
-3. **Component Organization**: Components are organized by feature/domain
-4. **Custom Hooks**: Reusable logic is extracted into custom hooks
 
 ## Browser Support
 
 - Chrome/Edge (latest)
 - Firefox (latest)
 - Safari (latest)
-
-## License
-
-[Add your license here]
