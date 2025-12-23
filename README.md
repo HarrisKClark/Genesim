@@ -9,7 +9,7 @@ A web-based platform for designing and simulating genetic circuits with an intui
 
 ## Features
 
-### 🧬 Circuit Design
+### Circuit Design
 - **Visual DNA Editor**: Interactive canvas with both abstract and detailed DNA views
 - **Component Library**: Pre-built biological parts including:
   - Promoters (pR, pLac, pTet, custom)
@@ -20,14 +20,14 @@ A web-based platform for designing and simulating genetic circuits with an intui
 - **Operon Detection**: Automatic detection and validation of genetic operons
 - **DNA Manipulation**: Copy, paste, delete, and reverse complement DNA sequences
 
-### 📊 Simulation Engine
+### Simulation Engine
 - **Deterministic Simulation**: Runge-Kutta 4 (RK4) solver for ODE-based simulations
 - **Stochastic Simulation**: Gillespie Stochastic Simulation Algorithm (SSA)
 - **Flow Cytometry**: Batch stochastic runs for population-level analysis
 - **Hill Function Regulation**: Promoter repression/activation based on inhibitor/activator concentrations
 - **Polycistronic mRNA**: Support for multi-protein operons
 
-### 🎨 User Interface
+### User Interface
 - **Dual View Modes**: Switch between abstract parts view and detailed DNA sequence view
 - **Interactive Selection**: Click and drag to select DNA regions with visual highlighting
 - **Real-time Cursor**: Precise cursor positioning for DNA editing
@@ -47,55 +47,7 @@ A web-based platform for designing and simulating genetic circuits with an intui
 - **NumPy** for numerical computation
 - **SciPy** for scientific computing
 - **Pydantic** for data validation
-
-## Installation
-
-### Prerequisites
-- **Node.js** 18+ and npm
-- **Python** 3.8+
-- **pip** or conda
-
-### Quick Start
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/yourusername/genesim.git
-   cd genesim
-   ```
-
-2. **Set up the backend**
-   ```bash
-   cd backend
-   python -m venv .venv
-   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-   pip install -r requirements.txt
-   ```
-
-3. **Set up the frontend**
-   ```bash
-   cd ../frontend
-   npm install
-   ```
-
-4. **Run the application**
-   
-   In one terminal (backend):
-   ```bash
-   cd backend
-   source .venv/bin/activate
-   uvicorn app.main:app --reload --port 8000
-   ```
-   
-   In another terminal (frontend):
-   ```bash
-   cd frontend
-   npm run dev
-   ```
-
-5. **Open your browser**
-   - Frontend: http://localhost:3000
-   - Backend API: http://localhost:8000
-   - API Docs: http://localhost:8000/docs
+  
 
 ## Usage
 
