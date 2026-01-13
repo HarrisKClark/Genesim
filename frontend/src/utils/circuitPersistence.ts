@@ -1,4 +1,6 @@
 import { CircuitComponent } from '../types/dnaTypes'
+import type { CustomPartsBundle } from './partLibrary'
+import type { BackboneSpec } from '../types/backboneTypes'
 
 export interface CircuitFileV1 {
   version: 1
@@ -7,12 +9,30 @@ export interface CircuitFileV1 {
   createdAt: number
   updatedAt: number
   dnaLength: number
+  /** Optional background DNA sequence (for per-plasmid edits). */
+  dnaSequence?: string[]
   components: CircuitComponent[]
+  /** Optional: multiple circuits within a single cell (v1-compatible extension). */
+  cellCircuits?: CircuitComponent[][]
+  /** Optional: multiple cells in a culture (v1-compatible extension). */
+  cultureCells?: Array<{
+    cellType: string
+    cellName: string
+    // Backward compatible:
+    // - old: circuits = CircuitComponent[][]
+    // - new: circuits = [{ id, backbone, components, dnaLength?, dnaSequence? }]
+    circuits: any
+    activeCircuitIndex?: number
+    backbone?: BackboneSpec
+  }>
+  customParts?: CustomPartsBundle
+  backbone?: BackboneSpec
 }
 
 const DB_NAME = 'genesim'
-const DB_VERSION = 1
+const DB_VERSION = 2
 const STORE = 'circuits'
+const BACKBONES_STORE = 'backbones'
 
 const DRAFT_ID = '__draft__'
 
@@ -37,10 +57,24 @@ function openDb(): Promise<IDBDatabase> {
         store.createIndex('byUpdatedAt', 'updatedAt')
         store.createIndex('byName', 'name')
       }
+      if (!db.objectStoreNames.contains(BACKBONES_STORE)) {
+        const store = db.createObjectStore(BACKBONES_STORE, { keyPath: 'id' })
+        store.createIndex('byUpdatedAt', 'updatedAt')
+        store.createIndex('byName', 'name')
+      }
     }
     req.onsuccess = () => resolve(req.result)
     req.onerror = () => reject(req.error ?? new Error('Failed to open IndexedDB'))
   })
+}
+
+// Shared IndexedDB helpers (used by backbone library too)
+export const GENESIM_DB_NAME = DB_NAME
+export const GENESIM_DB_VERSION = DB_VERSION
+export const GENESIM_BACKBONES_STORE = BACKBONES_STORE
+
+export async function openGenesimDb(): Promise<IDBDatabase> {
+  return await openDb()
 }
 
 function txp<T>(tx: IDBTransaction, request: IDBRequest<T>): Promise<T> {
@@ -76,7 +110,12 @@ export async function saveCircuit(input: {
   id?: string
   name: string
   dnaLength: number
+  dnaSequence?: string[]
   components: CircuitComponent[]
+  cellCircuits?: CircuitComponent[][]
+  cultureCells?: CircuitFileV1['cultureCells']
+  customParts?: CustomPartsBundle
+  backbone?: BackboneSpec
   createdAt?: number
 }): Promise<CircuitFileV1> {
   const id = input.id ?? uuid()
@@ -89,7 +128,12 @@ export async function saveCircuit(input: {
     createdAt,
     updatedAt: nowMs(),
     dnaLength: input.dnaLength,
+    dnaSequence: input.dnaSequence,
     components: input.components ?? [],
+    cellCircuits: input.cellCircuits,
+    cultureCells: input.cultureCells,
+    customParts: input.customParts,
+    backbone: input.backbone,
   }
   const db = await openDb()
   const tx = db.transaction(STORE, 'readwrite')
@@ -119,16 +163,34 @@ export async function duplicateCircuit(id: string, newName?: string): Promise<Ci
   return await saveCircuit({
     name: newName ?? `${rec.name} (copy)`,
     dnaLength: rec.dnaLength,
+    dnaSequence: (rec as any).dnaSequence,
     components: rec.components,
+    cellCircuits: rec.cellCircuits,
+    cultureCells: rec.cultureCells,
+    customParts: rec.customParts,
+    backbone: rec.backbone,
   })
 }
 
-export async function saveDraft(dnaLength: number, components: CircuitComponent[]): Promise<CircuitFileV1> {
+export async function saveDraft(
+  dnaLength: number,
+  components: CircuitComponent[],
+  dnaSequence?: string[],
+  customParts?: CustomPartsBundle,
+  backbone?: BackboneSpec,
+  cellCircuits?: CircuitComponent[][],
+  cultureCells?: CircuitFileV1['cultureCells']
+): Promise<CircuitFileV1> {
   return await saveCircuit({
     id: DRAFT_ID,
     name: 'Draft',
     dnaLength,
+    dnaSequence,
     components,
+    cellCircuits,
+    cultureCells,
+    customParts,
+    backbone,
   })
 }
 
@@ -169,13 +231,23 @@ export async function importCircuitFromFile(file: File): Promise<CircuitFileV1> 
     createdAt: Number(parsed.createdAt ?? nowMs()),
     updatedAt: nowMs(),
     dnaLength: Number(parsed.dnaLength ?? 10000),
+    dnaSequence: Array.isArray(parsed.dnaSequence) ? (parsed.dnaSequence as string[]) : undefined,
     components: parsed.components as CircuitComponent[],
+    cellCircuits: Array.isArray(parsed.cellCircuits) ? (parsed.cellCircuits as CircuitComponent[][]) : undefined,
+    cultureCells: Array.isArray(parsed.cultureCells) ? (parsed.cultureCells as CircuitFileV1['cultureCells']) : undefined,
+    customParts: parsed.customParts,
+    backbone: parsed.backbone,
   }
   // Save as a new record (avoid clobbering an existing one with same id)
   return await saveCircuit({
     name: rec.name,
     dnaLength: rec.dnaLength,
+    dnaSequence: rec.dnaSequence,
     components: rec.components,
+    cellCircuits: rec.cellCircuits,
+    cultureCells: rec.cultureCells,
+    customParts: rec.customParts,
+    backbone: rec.backbone,
   })
 }
 

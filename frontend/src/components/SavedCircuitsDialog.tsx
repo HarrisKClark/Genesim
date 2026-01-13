@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { CircuitComponent } from '../types/dnaTypes'
 import { DNA_LENGTH } from '../constants/circuitConstants'
+import type { BackboneSpec } from '../types/backboneTypes'
 import {
   CircuitFileV1,
   deleteCircuit,
@@ -12,6 +13,8 @@ import {
   renameCircuit,
   saveCircuit,
 } from '../utils/circuitPersistence'
+import { exportCustomParts } from '../utils/partLibrary'
+import { getDialogStyles, theme } from '../utils/themeUtils'
 
 type Mode = 'save' | 'load'
 type Tab = 'library' | 'import'
@@ -21,6 +24,9 @@ interface SavedCircuitsDialogProps {
   mode: Mode
   currentName: string
   currentComponents: CircuitComponent[]
+  currentCellCircuits?: CircuitComponent[][]
+  currentCultureCells?: CircuitFileV1['cultureCells']
+  currentBackbone?: BackboneSpec
   currentDnaLength?: number
   currentCircuitId: string | null
   onClose: () => void
@@ -33,6 +39,9 @@ export default function SavedCircuitsDialog({
   mode,
   currentName,
   currentComponents,
+  currentCellCircuits,
+  currentCultureCells,
+  currentBackbone,
   currentDnaLength = DNA_LENGTH,
   currentCircuitId,
   onClose,
@@ -87,6 +96,10 @@ export default function SavedCircuitsDialog({
         name: nameInput.trim() || 'Untitled Circuit',
         dnaLength: currentDnaLength,
         components: currentComponents ?? [],
+        cellCircuits: currentCellCircuits,
+        cultureCells: currentCultureCells,
+        customParts: exportCustomParts(),
+        backbone: currentBackbone,
       })
       await refresh()
       onSaved(rec)
@@ -186,16 +199,12 @@ export default function SavedCircuitsDialog({
     }
   }
 
+  const dialogStyles = getDialogStyles()
+
   return (
     <div
       style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(0,0,0,0.35)',
-        zIndex: 300,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
+        ...dialogStyles.overlay,
         padding: 20,
       }}
       onMouseDown={(e) => {
@@ -207,10 +216,11 @@ export default function SavedCircuitsDialog({
           width: 760,
           maxWidth: '95vw',
           maxHeight: '85vh',
-          background: 'white',
-          borderRadius: 10,
+          background: theme.bgDialog,
+          borderRadius: 0,
+          border: `2px solid ${theme.borderPrimary}`,
           overflow: 'hidden',
-          boxShadow: '0 10px 30px rgba(0,0,0,0.25)',
+          boxShadow: `4px 4px 0 ${theme.shadowColor}`,
           display: 'flex',
           flexDirection: 'column',
         }}
@@ -218,14 +228,14 @@ export default function SavedCircuitsDialog({
         <div
           style={{
             padding: '14px 16px',
-            borderBottom: '1px solid #e5e5e5',
+            borderBottom: `1px solid ${theme.borderLight}`,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            background: '#fafafa',
+            background: theme.bgDialogHeader,
           }}
         >
-          <div style={{ fontWeight: 700, fontSize: 14, fontFamily: 'Courier New, monospace' }}>
+          <div style={{ fontWeight: 700, fontSize: 14, fontFamily: 'Courier New, monospace', color: theme.textPrimary }}>
             {mode === 'save' ? 'Save Circuit' : 'Load Circuit'}
           </div>
           <button
@@ -237,6 +247,7 @@ export default function SavedCircuitsDialog({
               fontSize: 18,
               lineHeight: 1,
               padding: 6,
+              color: theme.textPrimary,
             }}
             title="Close"
           >
@@ -244,14 +255,15 @@ export default function SavedCircuitsDialog({
           </button>
         </div>
 
-        <div style={{ padding: 12, borderBottom: '1px solid #eee', display: 'flex', gap: 10 }}>
+        <div style={{ padding: 12, borderBottom: `1px solid ${theme.borderLight}`, display: 'flex', gap: 10, background: theme.bgDialog }}>
           <button
             onClick={() => setTab('library')}
             style={{
               padding: '6px 10px',
-              borderRadius: 6,
-              border: '1px solid #ddd',
-              background: tab === 'library' ? '#e9f2ff' : 'white',
+              borderRadius: 0,
+              border: `1px solid ${theme.borderPrimary}`,
+              background: tab === 'library' ? theme.accentPrimary : theme.bgSecondary,
+              color: tab === 'library' ? theme.textOnAccent : theme.textPrimary,
               cursor: 'pointer',
               fontFamily: 'Courier New, monospace',
               fontSize: 12,
@@ -263,9 +275,10 @@ export default function SavedCircuitsDialog({
             onClick={() => setTab('import')}
             style={{
               padding: '6px 10px',
-              borderRadius: 6,
-              border: '1px solid #ddd',
-              background: tab === 'import' ? '#e9f2ff' : 'white',
+              borderRadius: 0,
+              border: `1px solid ${theme.borderPrimary}`,
+              background: tab === 'import' ? theme.accentPrimary : theme.bgSecondary,
+              color: tab === 'import' ? theme.textOnAccent : theme.textPrimary,
               cursor: 'pointer',
               fontFamily: 'Courier New, monospace',
               fontSize: 12,
@@ -280,27 +293,23 @@ export default function SavedCircuitsDialog({
             placeholder="Search…"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            className="dialog-input"
             style={{
               width: 220,
-              padding: '6px 10px',
-              border: '1px solid #ddd',
-              borderRadius: 6,
-              fontFamily: 'Courier New, monospace',
-              fontSize: 12,
             }}
           />
         </div>
 
-        <div style={{ padding: 12, overflow: 'auto', flex: 1 }}>
+        <div className="dialog-body">
           {error && (
-            <div style={{ color: '#c0392b', marginBottom: 10, fontFamily: 'Courier New, monospace', fontSize: 12 }}>
+            <div className="dialog-error">
               {error}
             </div>
           )}
 
           {tab === 'import' ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div style={{ fontFamily: 'Courier New, monospace', fontSize: 12, color: '#555' }}>
+              <div style={{ fontFamily: 'Courier New, monospace', fontSize: 12, color: theme.textSecondary }}>
                 Import a circuit file exported from GeneSim (`.genesim.json`).
               </div>
               <input
@@ -313,109 +322,44 @@ export default function SavedCircuitsDialog({
           ) : (
             <>
               {busy && items.length === 0 ? (
-                <div style={{ color: '#777', fontFamily: 'Courier New, monospace', fontSize: 12 }}>Loading…</div>
+                <div style={{ color: theme.textMuted, fontFamily: 'Courier New, monospace', fontSize: 12 }}>Loading…</div>
               ) : filtered.length === 0 ? (
-                <div style={{ color: '#777', fontFamily: 'Courier New, monospace', fontSize: 12 }}>
+                <div style={{ color: theme.textMuted, fontFamily: 'Courier New, monospace', fontSize: 12 }}>
                   No saved circuits yet.
                 </div>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div className="dialog-list">
                   {filtered.map((c) => (
                     <div
                       key={c.id}
-                      style={{
-                        border: '1px solid #e6e6e6',
-                        borderRadius: 8,
-                        padding: 10,
-                        display: 'flex',
-                        gap: 10,
-                        alignItems: 'center',
-                      }}
+                      className="dialog-list-item"
                     >
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontFamily: 'Courier New, monospace', fontWeight: 700, fontSize: 12 }}>
+                        <div style={{ fontFamily: 'Courier New, monospace', fontWeight: 700, fontSize: 12, color: theme.textPrimary }}>
                           {c.name}
                         </div>
-                        <div style={{ fontFamily: 'Courier New, monospace', fontSize: 11, color: '#777', marginTop: 2 }}>
+                        <div style={{ fontFamily: 'Courier New, monospace', fontSize: 11, color: theme.textMuted, marginTop: 2 }}>
                           Updated: {new Date(c.updatedAt).toLocaleString()}
                         </div>
                       </div>
 
                       <button
+                        className="dialog-btn dialog-btn-primary"
                         onClick={() => handleLoad(c.id)}
                         disabled={busy}
-                        style={{
-                          padding: '6px 10px',
-                          borderRadius: 6,
-                          border: '1px solid #2e86de',
-                          background: '#2e86de',
-                          color: 'white',
-                          cursor: 'pointer',
-                          fontFamily: 'Courier New, monospace',
-                          fontSize: 12,
-                        }}
                       >
                         Load
                       </button>
-                      <button
-                        onClick={() => handleExport(c.id)}
-                        disabled={busy}
-                        style={{
-                          padding: '6px 10px',
-                          borderRadius: 6,
-                          border: '1px solid #ddd',
-                          background: 'white',
-                          cursor: 'pointer',
-                          fontFamily: 'Courier New, monospace',
-                          fontSize: 12,
-                        }}
-                      >
+                      <button className="dialog-btn dialog-btn-secondary" onClick={() => handleExport(c.id)} disabled={busy}>
                         Export
                       </button>
-                      <button
-                        onClick={() => handleDuplicate(c.id)}
-                        disabled={busy}
-                        style={{
-                          padding: '6px 10px',
-                          borderRadius: 6,
-                          border: '1px solid #ddd',
-                          background: 'white',
-                          cursor: 'pointer',
-                          fontFamily: 'Courier New, monospace',
-                          fontSize: 12,
-                        }}
-                      >
+                      <button className="dialog-btn dialog-btn-secondary" onClick={() => handleDuplicate(c.id)} disabled={busy}>
                         Duplicate
                       </button>
-                      <button
-                        onClick={() => handleRename(c.id)}
-                        disabled={busy}
-                        style={{
-                          padding: '6px 10px',
-                          borderRadius: 6,
-                          border: '1px solid #ddd',
-                          background: 'white',
-                          cursor: 'pointer',
-                          fontFamily: 'Courier New, monospace',
-                          fontSize: 12,
-                        }}
-                      >
+                      <button className="dialog-btn dialog-btn-secondary" onClick={() => handleRename(c.id)} disabled={busy}>
                         Rename
                       </button>
-                      <button
-                        onClick={() => handleDelete(c.id)}
-                        disabled={busy}
-                        style={{
-                          padding: '6px 10px',
-                          borderRadius: 6,
-                          border: '1px solid #ddd',
-                          background: 'white',
-                          cursor: 'pointer',
-                          fontFamily: 'Courier New, monospace',
-                          fontSize: 12,
-                          color: '#c0392b',
-                        }}
-                      >
+                      <button className="dialog-btn dialog-btn-danger" onClick={() => handleDelete(c.id)} disabled={busy}>
                         Delete
                       </button>
                     </div>
@@ -427,50 +371,27 @@ export default function SavedCircuitsDialog({
         </div>
 
         {mode === 'save' && (
-          <div style={{ borderTop: '1px solid #eee', padding: 12, display: 'flex', gap: 10, alignItems: 'center' }}>
-            <div style={{ fontFamily: 'Courier New, monospace', fontSize: 12, color: '#555' }}>Name:</div>
+          <div className="dialog-footer" style={{ justifyContent: 'flex-start' }}>
+            <div style={{ fontFamily: 'Courier New, monospace', fontSize: 12, color: theme.textSecondary }}>Name:</div>
             <input
+              className="dialog-input"
               value={nameInput}
               onChange={(e) => setNameInput(e.target.value)}
               disabled={busy}
-              style={{
-                flex: 1,
-                padding: '8px 10px',
-                border: '1px solid #ddd',
-                borderRadius: 6,
-                fontFamily: 'Courier New, monospace',
-                fontSize: 12,
-              }}
+              style={{ flex: 1 }}
             />
             <button
+              className="dialog-btn dialog-btn-primary"
               onClick={() => handleSave(false)}
               disabled={busy || !currentComponents}
-              style={{
-                padding: '8px 12px',
-                borderRadius: 6,
-                border: '1px solid #2e86de',
-                background: '#2e86de',
-                color: 'white',
-                cursor: 'pointer',
-                fontFamily: 'Courier New, monospace',
-                fontSize: 12,
-              }}
               title={currentCircuitId ? 'Update existing' : 'Save'}
             >
               Save
             </button>
             <button
+              className="dialog-btn dialog-btn-secondary"
               onClick={() => handleSave(true)}
               disabled={busy || !currentComponents}
-              style={{
-                padding: '8px 12px',
-                borderRadius: 6,
-                border: '1px solid #ddd',
-                background: 'white',
-                cursor: 'pointer',
-                fontFamily: 'Courier New, monospace',
-                fontSize: 12,
-              }}
               title="Save as a new circuit"
             >
               Save As…

@@ -59,7 +59,17 @@ export function buildExpandedLayout(opts: {
     .sort((a, b) => a.position - b.position)
 
   const totalInserted = placedComponents.reduce((acc, c) => acc + c.length, 0)
-  const expandedLength = backgroundLength + totalInserted
+  
+  // Calculate expanded length to accommodate all components.
+  // Must be at least backgroundLength + totalInserted, but also large enough
+  // to fit the highest-positioned component (position + length).
+  let expandedLength = backgroundLength + totalInserted
+  for (const comp of placedComponents) {
+    const compEnd = comp.position + comp.length
+    if (compEnd > expandedLength) {
+      expandedLength = compEnd
+    }
+  }
 
   const expandedSequence = new Array(expandedLength) as string[]
   const expandedToBackground = new Array(expandedLength).fill(null) as Array<number | null>

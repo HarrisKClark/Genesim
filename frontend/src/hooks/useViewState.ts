@@ -76,37 +76,41 @@ export function useViewState({
   const baseHeight = useMemo(() => Math.max(12, Math.min(24, 12 * zoom)), [zoom])
   const strandSpacing = useMemo(() => Math.max(20, Math.min(40, 20 * zoom)), [zoom])
   
+  // Hard cutoff between abstract and DNA view (declared early for bpPerPixel calculation)
+  const viewCutoffZoom = 2.0
+  
   // Calculate base bpPerPixel
   const baseBpPerPixel = BP_PER_PIXEL_BASE / zoom
   
   // Calculate effective bpPerPixel
+  // In DNA view (zoom >= 2.0), bases need enough pixels to render clearly.
+  // We apply a multiplier to ensure reasonable spacing while still allowing zoom to scale.
   const bpPerPixel = useMemo(() => {
-    const transitionStart = 1.5
-    const transitionEnd = 2.5
-    let transitionFactor = 0
-    if (zoom >= transitionStart && zoom <= transitionEnd) {
-      transitionFactor = (zoom - transitionStart) / (transitionEnd - transitionStart)
-    } else if (zoom > transitionEnd) {
-      transitionFactor = 1
+    if (zoom >= viewCutoffZoom) {
+      // In DNA view, give bases more space. Lower multiplier = more space per base.
+      // This ensures zoom continues to make a difference (10x more zoomed than 2.6x)
+      const dnaViewMultiplier = 0.12
+      return baseBpPerPixel * dnaViewMultiplier
     }
-    
-    const minBpPerPixel = 1 / minSpacing
-    return baseBpPerPixel * (1 - transitionFactor) + Math.min(baseBpPerPixel, minBpPerPixel) * transitionFactor
-  }, [zoom, baseBpPerPixel, minSpacing])
+    return baseBpPerPixel
+  }, [zoom, baseBpPerPixel])
   
   const totalWidth = useMemo(() => dnaLength / bpPerPixel, [dnaLength, bpPerPixel])
   
-  // Hard cutoff between abstract and DNA view
-  const viewCutoffZoom = 2.0
+  // Transition factor for view mode (used for styling transitions)
   const transitionFactor = useMemo(() => {
     return zoom >= viewCutoffZoom ? 1 : 0
-  }, [zoom, viewCutoffZoom])
+  }, [zoom])
   
   const showBasePairs = zoom >= viewCutoffZoom
   const showAbstractView = zoom < viewCutoffZoom
   
   // Calculate centered positions
-  const lineY = useMemo(() => canvasHeight > 0 ? canvasHeight / 2 : 200, [canvasHeight])
+  // In abstract view we leave extra vertical room below the insert for the plasmid backbone visualization.
+  const lineY = useMemo(() => {
+    if (canvasHeight <= 0) return 200
+    return showAbstractView ? canvasHeight * 0.42 : canvasHeight / 2
+  }, [canvasHeight, showAbstractView])
   const lineX = useMemo(() => canvasWidth > 0 && totalWidth < canvasWidth ? (canvasWidth - totalWidth) / 2 : 0, [canvasWidth, totalWidth])
   
   // Coordinate conversion functions

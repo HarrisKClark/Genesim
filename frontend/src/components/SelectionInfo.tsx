@@ -1,5 +1,6 @@
 import { DNASelection } from '../types/dnaTypes'
 import { getSequenceRange, calculateGCContent } from '../utils/dnaUtils'
+import { theme } from '../utils/themeUtils'
 
 interface SelectionInfoProps {
   selection: DNASelection
@@ -13,13 +14,14 @@ export default function SelectionInfo({ selection, dnaSequence }: SelectionInfoP
   return (
     <div className="selection-info" style={{
       position: 'absolute',
-      bottom: '36px', // Position above status bar (24px height) + padding
+      bottom: '50px', // Position above status bar + more padding
       left: '8px',
-      background: 'rgba(212, 212, 212, 0.9)',
+      background: theme.bgDialog,
       padding: '8px',
-      border: '1px solid #888',
+      border: `1px solid ${theme.borderPrimary}`,
       fontFamily: 'Courier New, monospace',
       fontSize: '10px',
+      color: theme.textPrimary,
       zIndex: 10,
       userSelect: 'none',
       WebkitUserSelect: 'none',
@@ -32,4 +34,3 @@ export default function SelectionInfo({ selection, dnaSequence }: SelectionInfoP
     </div>
   )
 }
-

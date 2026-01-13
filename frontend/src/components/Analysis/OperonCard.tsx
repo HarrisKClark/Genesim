@@ -1,5 +1,6 @@
 import { Operon } from '../../models/CircuitModel'
 import { getOperonLength } from '../../utils/operonDetection'
+import { theme } from '../../utils/themeUtils'
 
 interface OperonCardProps {
   operon: Operon
@@ -27,8 +28,8 @@ export default function OperonCard({
       style={{
         padding: '8px 10px',
         margin: '4px 0',
-        background: isSelected ? '#4a90e2' : operon.isValid ? '#f5f5f5' : '#fee',
-        border: `1px solid ${isSelected ? '#2d5aa0' : operon.isValid ? '#ccc' : '#e74c3c'}`,
+        background: isSelected ? theme.accentPrimary : operon.isValid ? theme.bgInput : '#fee',
+        border: `1px solid ${isSelected ? theme.accentHover : operon.isValid ? theme.borderLight : '#e74c3c'}`,
         borderRadius: '3px',
         cursor: 'pointer',
         transition: 'all 0.15s ease',
@@ -37,14 +38,14 @@ export default function OperonCard({
       }}
       onMouseEnter={(e) => {
         if (!isSelected) {
-          e.currentTarget.style.background = operon.isValid ? '#e8e8e8' : '#fdd'
-          e.currentTarget.style.borderColor = '#999'
+          e.currentTarget.style.background = operon.isValid ? theme.bgHover : '#fdd'
+          e.currentTarget.style.borderColor = theme.borderSecondary
         }
       }}
       onMouseLeave={(e) => {
         if (!isSelected) {
-          e.currentTarget.style.background = operon.isValid ? '#f5f5f5' : '#fee'
-          e.currentTarget.style.borderColor = operon.isValid ? '#ccc' : '#e74c3c'
+          e.currentTarget.style.background = operon.isValid ? theme.bgInput : '#fee'
+          e.currentTarget.style.borderColor = operon.isValid ? theme.borderLight : '#e74c3c'
         }
       }}
     >
@@ -52,7 +53,7 @@ export default function OperonCard({
         style={{
           fontWeight: 600,
           marginBottom: '4px',
-          color: isSelected ? '#fff' : '#000',
+          color: isSelected ? theme.textOnAccent : theme.textPrimary,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -67,7 +68,7 @@ export default function OperonCard({
       <div
         style={{
           fontSize: '9px',
-          color: isSelected ? 'rgba(255,255,255,0.9)' : '#555',
+          color: isSelected ? 'rgba(255,255,255,0.9)' : theme.textMuted,
           marginBottom: '3px',
         }}
       >
@@ -78,7 +79,7 @@ export default function OperonCard({
       <div
         style={{
           fontSize: '8px',
-          color: isSelected ? 'rgba(255,255,255,0.8)' : '#777',
+          color: isSelected ? 'rgba(255,255,255,0.8)' : theme.textHint,
           marginBottom: '3px',
         }}
       >
@@ -109,7 +110,7 @@ export default function OperonCard({
             color: '#e67e22',
             marginTop: '4px',
             paddingTop: '4px',
-            borderTop: '1px solid #ddd',
+            borderTop: `1px solid ${theme.borderLight}`,
           }}
         >
           {operon.warnings.slice(0, 2).map((warning, i) => (
@@ -123,4 +124,3 @@ export default function OperonCard({
     </div>
   )
 }
-

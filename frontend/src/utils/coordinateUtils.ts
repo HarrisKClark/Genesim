@@ -26,12 +26,18 @@ export function getBpFromMouse(
   canvasWidth: number,
   totalWidth: number,
   bpPerPixel: number,
-  dnaLength: number
+  dnaLength: number,
+  lineXOverride?: number
 ): number | null {
   if (!canvasRef.current || !scrollContainerRef.current) return null
   const rect = canvasRef.current.getBoundingClientRect()
   const scrollLeft = scrollContainerRef.current.scrollLeft
-  const currentLineX = canvasWidth > 0 && totalWidth < canvasWidth ? (canvasWidth - totalWidth) / 2 : 0
+  const currentLineX =
+    typeof lineXOverride === 'number'
+      ? lineXOverride
+      : canvasWidth > 0 && totalWidth < canvasWidth
+        ? (canvasWidth - totalWidth) / 2
+        : 0
   const x = (e.clientX - rect.left) + scrollLeft - currentLineX
   const bp = xToBp(x, bpPerPixel)
   return Math.max(0, Math.min(dnaLength - 1, bp))
@@ -50,14 +56,20 @@ export function getCursorPositionFromMouse(
   totalWidth: number,
   bpPerPixel: number,
   dnaLength: number,
-  _showBasePairs: boolean // Kept for API compatibility but not used - cursor works in both views
+  _showBasePairs: boolean, // Kept for API compatibility but not used - cursor works in both views
+  lineXOverride?: number
 ): number | null {
   if (!canvasRef.current || !scrollContainerRef.current) return null
   // Allow cursor in both DNA view and abstract view
   
   const rect = canvasRef.current.getBoundingClientRect()
   const scrollLeft = scrollContainerRef.current.scrollLeft
-  const currentLineX = canvasWidth > 0 && totalWidth < canvasWidth ? (canvasWidth - totalWidth) / 2 : 0
+  const currentLineX =
+    typeof lineXOverride === 'number'
+      ? lineXOverride
+      : canvasWidth > 0 && totalWidth < canvasWidth
+        ? (canvasWidth - totalWidth) / 2
+        : 0
   const mouseX = (e.clientX - rect.left) + scrollLeft - currentLineX
   
   // Find which base the mouse is over

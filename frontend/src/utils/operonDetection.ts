@@ -17,11 +17,15 @@ interface OperonBuilder {
   pendingRbs: CircuitElement | null
   terminator: CircuitElement | null
   startBp: number
+  lastElementIndex: number // Track where this operon's elements end
 }
 
 /**
  * Detect operons in a list of circuit elements
  * An operon consists of: Promoter -> (RBS -> Gene)+ -> Terminator?
+ * 
+ * Enhanced logic: After building operons, do a second pass to associate
+ * terminators that may be between operons but weren't captured in initial pass.
  */
 export function detectOperons(elements: CircuitElement[]): Operon[] {
   const operons: Operon[] = []
@@ -29,6 +33,7 @@ export function detectOperons(elements: CircuitElement[]): Operon[] {
   let currentOperon: OperonBuilder = createEmptyBuilder()
   let operonCounter = 0
 
+  // First pass: detect operons using state machine
   for (let i = 0; i < elements.length; i++) {
     const element = elements[i]
 
@@ -42,6 +47,7 @@ export function detectOperons(elements: CircuitElement[]): Operon[] {
             pendingRbs: null,
             terminator: null,
             startBp: element.startBp,
+            lastElementIndex: i,
           }
           state = OperonState.AFTER_PROMOTER
         }
@@ -51,6 +57,7 @@ export function detectOperons(elements: CircuitElement[]): Operon[] {
         if (element.type === 'rbs') {
           // Found RBS after promoter
           currentOperon.pendingRbs = element
+          currentOperon.lastElementIndex = i
           state = OperonState.AFTER_RBS
         } else if (element.type === 'promoter') {
           // Found another promoter before completing operon
@@ -64,12 +71,14 @@ export function detectOperons(elements: CircuitElement[]): Operon[] {
             pendingRbs: null,
             terminator: null,
             startBp: element.startBp,
+            lastElementIndex: i,
           }
           state = OperonState.AFTER_PROMOTER
         } else if (element.type === 'terminator') {
           // Terminator without genes - incomplete operon
           if (currentOperon.promoter) {
             currentOperon.terminator = element
+            currentOperon.lastElementIndex = i
             operons.push(finalizeOperon(currentOperon, operonCounter++))
           }
           currentOperon = createEmptyBuilder()
@@ -86,12 +95,14 @@ export function detectOperons(elements: CircuitElement[]): Operon[] {
               gene: element,
             })
             currentOperon.pendingRbs = null
+            currentOperon.lastElementIndex = i
           }
           state = OperonState.AFTER_GENE
         } else if (element.type === 'terminator') {
-          // Terminator after RBS (no gene yet) - still record terminator so we don't warn "missing terminator"
+          // Terminator after RBS (no gene yet) - still record terminator
           if (currentOperon.promoter) {
             currentOperon.terminator = element
+            currentOperon.lastElementIndex = i
             operons.push(finalizeOperon(currentOperon, operonCounter++))
           }
           currentOperon = createEmptyBuilder()
@@ -107,6 +118,7 @@ export function detectOperons(elements: CircuitElement[]): Operon[] {
             pendingRbs: null,
             terminator: null,
             startBp: element.startBp,
+            lastElementIndex: i,
           }
           state = OperonState.AFTER_PROMOTER
         } else {
@@ -123,15 +135,17 @@ export function detectOperons(elements: CircuitElement[]): Operon[] {
         if (element.type === 'rbs') {
           // Another RBS - polycistronic operon
           currentOperon.pendingRbs = element
+          currentOperon.lastElementIndex = i
           state = OperonState.AFTER_RBS
         } else if (element.type === 'terminator') {
           // Terminator completes the operon
           currentOperon.terminator = element
+          currentOperon.lastElementIndex = i
           operons.push(finalizeOperon(currentOperon, operonCounter++))
           currentOperon = createEmptyBuilder()
           state = OperonState.SEARCHING
         } else if (element.type === 'promoter') {
-          // New promoter - current operon ends here (no terminator)
+          // New promoter - save current operon and start new
           if (currentOperon.promoter) {
             operons.push(finalizeOperon(currentOperon, operonCounter++))
           }
@@ -141,6 +155,7 @@ export function detectOperons(elements: CircuitElement[]): Operon[] {
             pendingRbs: null,
             terminator: null,
             startBp: element.startBp,
+            lastElementIndex: i,
           }
           state = OperonState.AFTER_PROMOTER
         } else {
@@ -160,6 +175,53 @@ export function detectOperons(elements: CircuitElement[]): Operon[] {
     operons.push(finalizeOperon(currentOperon, operonCounter++))
   }
 
+  // Second pass: Look for unassigned terminators and associate them with preceding operons
+  // This handles cases where terminators are between operons
+  const assignedTerminatorIds = new Set(operons.filter(o => o.terminator).map(o => o.terminator!.id))
+  const unassignedTerminators = elements.filter(e => e.type === 'terminator' && !assignedTerminatorIds.has(e.id))
+
+  for (const terminator of unassignedTerminators) {
+    // Find the operon whose last gene is closest to (and before) this terminator
+    let bestOperon: Operon | null = null
+    let bestDistance = Infinity
+
+    for (const operon of operons) {
+      // Only consider operons without terminators
+      if (operon.terminator) continue
+
+      // Get the last gene's end position
+      const lastPair = operon.rbsGenePairs[operon.rbsGenePairs.length - 1]
+      if (!lastPair) continue
+
+      const lastGeneEnd = lastPair.gene.endBp
+
+      // Check if terminator is after this gene
+      if (terminator.startBp >= lastGeneEnd) {
+        const distance = terminator.startBp - lastGeneEnd
+        // Also check that the terminator isn't after the next operon's start
+        const nextOperonStart = operons
+          .filter(o => o.startBp > operon.endBp)
+          .map(o => o.startBp)
+          .sort((a, b) => a - b)[0]
+
+        // Terminator must be before next operon (or there is no next operon)
+        if ((!nextOperonStart || terminator.startBp < nextOperonStart) && distance < bestDistance) {
+          bestDistance = distance
+          bestOperon = operon
+        }
+      }
+    }
+
+    // Assign terminator to best matching operon
+    if (bestOperon && bestDistance < 500) { // Only associate if reasonably close (< 500bp)
+      bestOperon.terminator = terminator
+      bestOperon.endBp = terminator.endBp
+      // Re-validate
+      bestOperon.warnings = validateOperon(bestOperon)
+      bestOperon.isValid = bestOperon.warnings.length === 0
+    }
+  }
+
   return operons
 }
 
@@ -173,6 +235,7 @@ function createEmptyBuilder(): OperonBuilder {
     pendingRbs: null,
     terminator: null,
     startBp: 0,
+    lastElementIndex: -1,
   }
 }
 
@@ -295,4 +358,3 @@ export function getOperonGenes(operon: Operon): CircuitElement[] {
 export function getOperonLength(operon: Operon): number {
   return operon.endBp - operon.startBp
 }
-

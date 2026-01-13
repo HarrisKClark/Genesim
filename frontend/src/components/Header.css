@@ -1,19 +1,25 @@
 .header {
-  background: #3a3a3a;
-  color: #e0e0e0;
+  background: var(--bg-header);
+  color: var(--text-inverse);
   padding: 8px 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border-bottom: 2px solid #555;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  border-bottom: 2px solid var(--border-primary);
+  box-shadow: 0 1px 3px var(--shadow-color);
   font-family: 'Courier New', monospace;
 }
 
 .header-content {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 12px;
+}
+
+.header-logo {
+  height: 36px;
+  width: auto;
+  object-fit: contain;
 }
 
 .header-title {
@@ -26,7 +32,7 @@
 
 .header-subtitle {
   font-size: 11px;
-  color: #aaa;
+  color: var(--text-muted);
   margin: 0;
   text-transform: uppercase;
 }
@@ -38,7 +44,7 @@
 
 .btn {
   padding: 6px 12px;
-  border: 1px solid #555;
+  border: 1px solid var(--border-primary);
   border-radius: 0;
   cursor: pointer;
   font-size: 11px;
@@ -49,24 +55,21 @@
 }
 
 .btn-primary {
-  background: #4a5568;
+  background: var(--accent-primary);
   color: #fff;
-  border-color: #2d3748;
+  border-color: var(--accent-hover);
 }
 
 .btn-primary:hover {
-  background: #2d3748;
-  border-color: #1a202c;
+  background: var(--accent-hover);
 }
 
 .btn-secondary {
-  background: #4a4a4a;
-  color: #e0e0e0;
-  border-color: #666;
+  background: var(--bg-tertiary);
+  color: var(--text-inverse);
+  border-color: var(--border-primary);
 }
 
 .btn-secondary:hover {
-  background: #555;
-  border-color: #777;
+  background: var(--border-primary);
 }
-

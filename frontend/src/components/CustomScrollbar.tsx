@@ -1,3 +1,5 @@
+import { theme } from '../utils/themeUtils'
+
 interface CustomScrollbarProps {
   scrollLeft: number // Used in parent calculations
   isDraggingHScroll: boolean
@@ -21,6 +23,11 @@ export default function CustomScrollbar({
   hScrollTrackRef,
   onMouseDown,
 }: CustomScrollbarProps) {
+  const accentColor = theme.accentPrimary
+  const accentHover = theme.accentHover
+  const bgSecondary = theme.bgSecondary
+  const borderPrimary = theme.borderPrimary
+
   if (!hasHorizontalScroll) return null
 
   return (
@@ -34,8 +41,8 @@ export default function CustomScrollbar({
         left: 0,
         width: `${hScrollTrackWidth}px`,
         height: `${scrollbarSize}px`,
-        background: '#d4d4d4',
-        borderTop: '1px solid #888',
+        background: bgSecondary,
+        borderTop: `1px solid ${borderPrimary}`,
         zIndex: 100,
         cursor: 'default',
       }}
@@ -48,8 +55,8 @@ export default function CustomScrollbar({
           top: 0,
           width: `${hScrollThumbWidth}px`,
           height: `${scrollbarSize}px`,
-          background: isDraggingHScroll ? '#2d5aa0' : '#4a90e2',
-          border: '1px solid #2d5aa0',
+          background: isDraggingHScroll ? accentHover : accentColor,
+          border: `1px solid ${accentHover}`,
           cursor: isDraggingHScroll ? 'grabbing' : 'grab',
           pointerEvents: 'none',
         }}
@@ -57,4 +64,3 @@ export default function CustomScrollbar({
     </div>
   )
 }
-

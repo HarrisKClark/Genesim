@@ -1,9 +1,9 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useDrag } from 'react-dnd'
 import './ComponentLibrary.css'
 import OperonAnalysisPanel from './Analysis/OperonAnalysisPanel'
 import { Operon, ValidationResult } from '../models/CircuitModel'
-import { getComponentCategories } from '../utils/partLibrary'
+import { getComponentCategories, subscribePartLibrary } from '../utils/partLibrary'
 import CustomPromoterDialog from './CustomPromoterDialog'
 
 interface ComponentItemProps {
@@ -21,7 +21,7 @@ function ComponentItem({ type, name, subType, color, onContextMenu }: ComponentI
     collect: (monitor) => ({
       isDragging: monitor.isDragging(),
     }),
-  }))
+  }), [type, name, subType])  // Dependencies ensure item updates when part changes
 
   return (
     <div
@@ -37,22 +37,24 @@ function ComponentItem({ type, name, subType, color, onContextMenu }: ComponentI
   )
 }
 
-// Props for operon analysis passed from parent
-interface AnalysisPanelProps {
-  operons: Operon[]
-  validationResult: ValidationResult | null
-  selectedOperonId: string | null
-  showHighlights: boolean
-  onOperonSelect: (operonId: string | null) => void
-  onHighlightToggle: (show: boolean) => void
-}
+import { CircuitComponent } from '../types/dnaTypes'
 
-function AnalysisPanel(props: AnalysisPanelProps) {
-  return <OperonAnalysisPanel {...props} />
+// Culture cell type for multi-cell analysis
+interface CultureCell {
+  id: string
+  cellType: string
+  cellName: string
+  circuits: Array<{
+    id: string
+    components: CircuitComponent[]
+    dnaLength?: number
+  }>
 }
 
 interface ComponentLibraryProps {
-  // Operon analysis props
+  // Culture data for multi-cell/plasmid analysis
+  cultureCells?: CultureCell[]
+  // Legacy single-plasmid props (fallback)
   operons?: Operon[]
   validationResult?: ValidationResult | null
   selectedOperonId?: string | null
@@ -64,6 +66,7 @@ interface ComponentLibraryProps {
 }
 
 export default function ComponentLibrary({
+  cultureCells = [],
   operons = [],
   validationResult = null,
   selectedOperonId = null,
@@ -72,31 +75,53 @@ export default function ComponentLibrary({
   onHighlightToggle = () => {},
   onPartContextMenu,
 }: ComponentLibraryProps) {
-  const [mainTab, setMainTab] = useState<'parts' | 'analysis'>('parts')
+  const [mainTab, setMainTab] = useState<'parts' | 'analysis' | 'circuits' | 'cells'>('parts')
   const [activePartCategory, setActivePartCategory] = useState<string>('promoter')
   const [geneTab, setGeneTab] = useState<'reporter' | 'activator' | 'repressor'>('reporter')
+  const [promoterTab, setPromoterTab] = useState<'constitutive' | 'regulated' | 'inducible'>('constitutive')
   const [customDialogOpen, setCustomDialogOpen] = useState(false)
   const [libraryRevision, setLibraryRevision] = useState(0)
+
+  useEffect(() => {
+    return subscribePartLibrary(() => setLibraryRevision((v) => v + 1))
+  }, [])
 
   const componentCategories = useMemo(() => {
     // Recompute when custom parts are created (session-only store)
     return getComponentCategories()
   }, [libraryRevision])
   const activeCategory = componentCategories.find(cat => cat.id === activePartCategory) || componentCategories[0]
-  const visibleComponents =
-    activeCategory.id === 'gene'
-      ? activeCategory.components.filter((c) => (c.geneClass || 'reporter') === geneTab)
-      : activeCategory.components
+  const visibleComponents = (() => {
+    if (activeCategory.id === 'gene') {
+      return activeCategory.components.filter((c) => (c.geneClass || 'reporter') === geneTab)
+    }
+    if (activeCategory.id === 'promoter') {
+      return activeCategory.components.filter((c) => (c.promoterClass || 'regulated') === promoterTab)
+    }
+    return activeCategory.components
+  })()
 
   return (
     <div className="component-library">
-      {/* Main tabs: Parts vs Analysis */}
+      {/* Main tabs */}
       <div className="main-tabs">
         <button
           className={`main-tab ${mainTab === 'parts' ? 'active' : ''}`}
           onClick={() => setMainTab('parts')}
         >
           Parts
+        </button>
+        <button
+          className={`main-tab ${mainTab === 'circuits' ? 'active' : ''}`}
+          onClick={() => setMainTab('circuits')}
+        >
+          Circuits
+        </button>
+        <button
+          className={`main-tab ${mainTab === 'cells' ? 'active' : ''}`}
+          onClick={() => setMainTab('cells')}
+        >
+          Cells
         </button>
         <button
           className={`main-tab ${mainTab === 'analysis' ? 'active' : ''}`}
@@ -121,6 +146,28 @@ export default function ComponentLibrary({
             ))}
           </div>
           <div className="component-content">
+            {activeCategory.id === 'promoter' && (
+              <div className="component-tabs" style={{ marginTop: 0, borderTop: 'none' }}>
+                <button
+                  className={`component-tab ${promoterTab === 'constitutive' ? 'active' : ''}`}
+                  onClick={() => setPromoterTab('constitutive')}
+                >
+                  Constitutive
+                </button>
+                <button
+                  className={`component-tab ${promoterTab === 'regulated' ? 'active' : ''}`}
+                  onClick={() => setPromoterTab('regulated')}
+                >
+                  Regulated
+                </button>
+                <button
+                  className={`component-tab ${promoterTab === 'inducible' ? 'active' : ''}`}
+                  onClick={() => setPromoterTab('inducible')}
+                >
+                  Inducible
+                </button>
+              </div>
+            )}
             {activeCategory.id === 'gene' && (
               <div className="component-tabs" style={{ marginTop: 0, borderTop: 'none' }}>
                 <button
@@ -144,9 +191,9 @@ export default function ComponentLibrary({
               </div>
             )}
             <div className="component-grid">
-              {visibleComponents.map((comp, idx) => (
+              {visibleComponents.map((comp) => (
                 <ComponentItem
-                  key={`${comp.type}-${idx}`}
+                  key={`${comp.type}-${comp.name}`}
                   type={comp.type}
                   name={comp.name}
                   subType={comp.subType}
@@ -161,26 +208,25 @@ export default function ComponentLibrary({
 
               {activeCategory.id === 'promoter' && (
                 <div
-                  className="component-item"
+                  className="component-item add-custom-part"
                   style={{
-                    border: '2px dashed #999',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
                     cursor: 'pointer',
-                    opacity: 0.9,
                   }}
                   onClick={() => setCustomDialogOpen(true)}
                   title="Add custom promoter"
                 >
-                  <span style={{ fontSize: 22, fontWeight: 700, color: '#666' }}>+</span>
+                  <span className="add-custom-part-icon">+</span>
                 </div>
               )}
             </div>
           </div>
         </>
-      ) : (
-        <AnalysisPanel
+      ) : mainTab === 'analysis' ? (
+        <OperonAnalysisPanel
+          cultureCells={cultureCells}
           operons={operons}
           validationResult={validationResult}
           selectedOperonId={selectedOperonId}
@@ -188,6 +234,24 @@ export default function ComponentLibrary({
           onOperonSelect={onOperonSelect}
           onHighlightToggle={onHighlightToggle}
         />
+      ) : mainTab === 'circuits' ? (
+        <div className="component-content">
+          <div style={{ fontFamily: 'Courier New, monospace', fontSize: 12, fontWeight: 700, marginBottom: 8, color: 'var(--text-primary)' }}>
+            Circuits
+          </div>
+          <div style={{ fontFamily: 'Courier New, monospace', fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.4 }}>
+            This tab will hold circuit management tools (new/load/save, templates, etc.).
+          </div>
+        </div>
+      ) : (
+        <div className="component-content">
+          <div style={{ fontFamily: 'Courier New, monospace', fontSize: 12, fontWeight: 700, marginBottom: 8, color: 'var(--text-primary)' }}>
+            Cells
+          </div>
+          <div style={{ fontFamily: 'Courier New, monospace', fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.4 }}>
+            This tab will hold cell context (chassis, growth conditions, plasmid copy number effects, etc.).
+          </div>
+        </div>
       )}
 
       <CustomPromoterDialog

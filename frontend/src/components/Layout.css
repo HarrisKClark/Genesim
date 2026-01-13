@@ -3,7 +3,7 @@
   flex-direction: column;
   height: 100vh;
   overflow: hidden;
-  background: #e8e8e8;
+  background: var(--bg-primary);
 }
 
 .layout-content {
@@ -23,14 +23,15 @@
   position: relative;
 }
 
+
 .results-toggle {
   position: fixed;
   bottom: 40px;
   right: 20px;
   padding: 8px 16px;
-  background: #4a5568;
-  color: white;
-  border: 1px solid #2d3748;
+  background: var(--bg-header);
+  color: var(--text-inverse);
+  border: 1px solid var(--border-primary);
   border-radius: 2px;
   cursor: pointer;
   font-size: 12px;
@@ -41,6 +42,5 @@
 }
 
 .results-toggle:hover {
-  background: #2d3748;
+  background: var(--bg-tertiary);
 }
-

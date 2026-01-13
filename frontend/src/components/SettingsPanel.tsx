@@ -1,11 +1,14 @@
 import './SettingsPanel.css'
-import './SettingsPanel.css'
+
+export type ThemeMode = 'light' | 'dark' | 'iluvatar'
 
 interface SettingsPanelProps {
   isOpen: boolean
   onClose: () => void
   zoomSensitivity: number
   onZoomSensitivityChange: (value: number) => void
+  theme: ThemeMode
+  onThemeChange: (value: ThemeMode) => void
 }
 
 export default function SettingsPanel({
@@ -13,6 +16,8 @@ export default function SettingsPanel({
   onClose,
   zoomSensitivity,
   onZoomSensitivityChange,
+  theme,
+  onThemeChange,
 }: SettingsPanelProps) {
   if (!isOpen) return null
 
@@ -24,6 +29,37 @@ export default function SettingsPanel({
           <button className="settings-close" onClick={onClose}>×</button>
         </div>
         <div className="settings-content">
+          {/* Theme Selector */}
+          <div className="settings-section">
+            <label className="settings-label">
+              <span>Theme</span>
+            </label>
+            <div className="theme-options">
+              <button
+                className={`theme-btn ${theme === 'light' ? 'active' : ''}`}
+                onClick={() => onThemeChange('light')}
+              >
+                Light
+              </button>
+              <button
+                className={`theme-btn ${theme === 'dark' ? 'active' : ''}`}
+                onClick={() => onThemeChange('dark')}
+              >
+                Dark
+              </button>
+              <button
+                className={`theme-btn iluvatar ${theme === 'iluvatar' ? 'active' : ''}`}
+                onClick={() => onThemeChange('iluvatar')}
+              >
+                Iluvatar
+              </button>
+            </div>
+            <div className="settings-hint">
+              Choose a color theme for the interface
+            </div>
+          </div>
+
+          {/* Zoom Sensitivity */}
           <div className="settings-section">
             <label className="settings-label">
               <span>Zoom Sensitivity</span>
@@ -47,4 +83,3 @@ export default function SettingsPanel({
     </div>
   )
 }
-

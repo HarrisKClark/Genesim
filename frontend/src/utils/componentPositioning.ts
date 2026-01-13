@@ -210,25 +210,51 @@ export function snapToValidPosition(
  * Valid insertion boundaries are any integer position in [0..expandedLength] that is NOT
  * strictly inside a component span (start < pos < end). Boundaries at start or end are valid.
  *
+ * If componentLength is provided, ensures the component fits entirely within bounds
+ * (position + componentLength <= expandedLength), preventing right-side overhang.
+ *
  * This allows adjacent placement like [block1][block2] by inserting and shifting downstream.
  */
 export function snapToValidInsertionPosition(
   desiredPosition: number,
   expandedLength: number,
   components: CircuitComponent[],
-  opts?: { excludeId?: string }
+  opts?: { excludeId?: string; componentLength?: number; isRepositioning?: boolean }
 ): { position: number; snapped: boolean; blockedBy: string[] } {
   const n = Math.max(0, Math.round(expandedLength))
+  const compLen = opts?.componentLength ? Math.max(0, Math.round(opts.componentLength)) : 0
   const desired = Math.round(desiredPosition)
-  let pos = Math.max(0, Math.min(n, desired))
+  // For repositioning: the component will extend the space when placed, so max is the full length
+  // For new components: position + componentLength must fit within expandedLength
+  const maxValidPos = opts?.isRepositioning ? n : (compLen > 0 ? Math.max(0, n - compLen) : n)
+  let pos = Math.max(0, Math.min(maxValidPos, desired))
 
+  // Check if the NEW component [pos, pos+compLen] would overlap with any existing component
+  // IMPORTANT: For repositioning, we need to account for the shift that will happen
+  // when the component is inserted. Components at >= pos will shift by compLen.
   const blockers: Array<{ id: string; start: number; end: number }> = []
+  const newStart = pos
+  const newEnd = pos + compLen
+  
   for (const comp of components) {
     if (opts?.excludeId && comp.id === opts.excludeId) continue
     if (comp.position === undefined) continue
     const start = Math.round(comp.position)
-    const end = start + Math.max(0, Math.round(comp.length))
-    if (pos > start && pos < end) {
+    const length = Math.max(0, Math.round(comp.length))
+    const end = start + length
+    
+    // For repositioning: simulate the shift that will happen when component is inserted
+    // Components at >= pos will move right by compLen
+    let checkStart = start
+    let checkEnd = end
+    if (opts?.isRepositioning && start >= pos) {
+      checkStart = start + compLen
+      checkEnd = end + compLen
+    }
+    
+    // Check for ANY overlap between [newStart, newEnd] and [checkStart, checkEnd]
+    // Overlap occurs when: newStart < checkEnd AND newEnd > checkStart
+    if (newStart < checkEnd && newEnd > checkStart) {
       blockers.push({ id: comp.id, start, end })
     }
   }
@@ -237,31 +263,81 @@ export function snapToValidInsertionPosition(
     return { position: pos, snapped: false, blockedBy: [] }
   }
 
-  // If pos is inside multiple (shouldn't happen if non-overlap holds), snap based on nearest boundary across blockers.
+  // Find valid positions that don't cause overlap.
+  // Try positions just before and just after each blocking component.
+  const candidates: number[] = []
+  
+  for (const b of blockers) {
+    // Position just before blocker (so new component ends at blocker's start)
+    const beforePos = b.start - compLen
+    if (beforePos >= 0) {
+      candidates.push(beforePos)
+    }
+    // Position just after blocker (new component starts at blocker's end)
+    const afterPos = b.end
+    // For repositioning: allow placing at end (component extends space)
+    // For new: must fit within current bounds
+    if (opts?.isRepositioning ? (afterPos <= n) : (afterPos + compLen <= n)) {
+      candidates.push(afterPos)
+    }
+    // For repositioning: also consider placing AT the blocker's start position
+    // This works because the blocker will shift right when the component is inserted
+    // Result: component ends where blocker begins (adjacent/touching)
+    if (opts?.isRepositioning && b.start >= 0 && b.start <= n) {
+      candidates.push(b.start)
+    }
+  }
+  
+  // Find the candidate closest to desired position
   let bestPos = pos
   let bestDist = Number.POSITIVE_INFINITY
-  for (const b of blockers) {
-    const candA = b.start
-    const candB = b.end
-    const distA = Math.abs(pos - candA)
-    const distB = Math.abs(pos - candB)
-    if (distA < bestDist) {
-      bestDist = distA
-      bestPos = candA
+  
+  for (const cand of candidates) {
+    // Verify this candidate is within bounds
+    if (cand < 0 || cand > maxValidPos) continue
+    
+    // Verify this candidate doesn't overlap with any other component
+    // IMPORTANT: When repositioning, components at >= cand will shift by compLen,
+    // so we need to check overlap AFTER the simulated shift
+    const candEnd = cand + compLen
+    let valid = true
+    for (const comp of components) {
+      if (opts?.excludeId && comp.id === opts.excludeId) continue
+      if (comp.position === undefined) continue
+      const start = Math.round(comp.position)
+      const compLength = Math.max(0, Math.round(comp.length))
+      
+      // Simulate the shift: components at >= cand will move by +compLen
+      const shiftedStart = start >= cand ? start + compLen : start
+      const shiftedEnd = shiftedStart + compLength
+      
+      // Check overlap with shifted positions
+      if (cand < shiftedEnd && candEnd > shiftedStart) {
+        valid = false
+        break
+      }
     }
-    if (distB < bestDist) {
-      bestDist = distB
-      bestPos = candB
+    
+    if (valid) {
+      const dist = Math.abs(cand - desired)
+      if (dist < bestDist) {
+        bestDist = dist
+        bestPos = cand
+      }
     }
   }
 
-  bestPos = Math.max(0, Math.min(n, bestPos))
+  // Also apply component length constraint to snapped position
+  bestPos = Math.max(0, Math.min(maxValidPos, bestPos))
   return { position: bestPos, snapped: true, blockedBy: blockers.map((b) => b.id) }
 }
 
 /**
  * Shift component insertion indices for an insertion at boundary `fromPosition`.
  * This is inclusive (>=) because inserting at a component start should push it downstream.
+ * 
+ * After shifting, validates that all components remain at valid positions (>= 0).
+ * Negative positions would indicate a bug in the insertion logic.
  */
 export function shiftComponentPositionsAtOrAfter(
   components: CircuitComponent[],
@@ -274,7 +350,9 @@ export function shiftComponentPositionsAtOrAfter(
     if (opts?.excludeId && comp.id === opts.excludeId) return comp
     if (comp.position === undefined) return comp
     if (Math.round(comp.position) >= from) {
-      return { ...comp, position: Math.round(comp.position) + shiftAmount }
+      const newPosition = Math.round(comp.position) + shiftAmount
+      // Ensure position doesn't go negative (would be invalid)
+      return { ...comp, position: Math.max(0, newPosition) }
     }
     return comp
   })

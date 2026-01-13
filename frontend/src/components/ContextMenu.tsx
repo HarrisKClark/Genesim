@@ -1,5 +1,6 @@
 import { DNASelection } from '../types/dnaTypes'
 import { getSequenceRange, translate } from '../utils/dnaUtils'
+import { theme } from '../utils/themeUtils'
 
 interface ContextMenuProps {
   contextMenu: { x: number; y: number; bp: number } | null
@@ -45,39 +46,33 @@ export default function ContextMenu({
 
   return (
     <div
+      className="context-menu"
       style={{
-        position: 'fixed',
         left: `${contextMenu.x}px`,
         top: `${contextMenu.y}px`,
-        background: '#fff',
-        border: '1px solid #333',
-        padding: '4px',
-        zIndex: 1000,
-        fontFamily: 'Courier New, monospace',
-        fontSize: '11px',
       }}
       onMouseDown={(e) => e.stopPropagation()}
     >
-      <div
-        style={{ padding: '4px 8px', cursor: 'pointer', borderBottom: '1px solid #ddd' }}
+      <button
+        className="context-menu-item"
         onClick={() => {
           if (selection) onCopy()
           onClose()
         }}
       >
         Copy
-      </div>
-      <div
-        style={{ padding: '4px 8px', cursor: 'pointer', borderBottom: '1px solid #ddd' }}
+      </button>
+      <button
+        className="context-menu-item"
         onClick={() => {
           if (selection) onCut()
           onClose()
         }}
       >
         Cut
-      </div>
-      <div
-        style={{ padding: '4px 8px', cursor: 'pointer', borderBottom: '1px solid #ddd' }}
+      </button>
+      <button
+        className="context-menu-item"
         onClick={() => {
           if (clipboard) {
             if (cursorPosition !== null) {
@@ -90,51 +85,55 @@ export default function ContextMenu({
         }}
       >
         Paste
-      </div>
-      <div
-        style={{ padding: '4px 8px', cursor: 'pointer', borderBottom: '1px solid #ddd' }}
+      </button>
+      <div className="context-menu-separator" />
+      <button
+        className="context-menu-item"
         onClick={() => {
           if (selection) onReverseComplement()
           onClose()
         }}
       >
         Reverse Complement
-      </div>
-      <div
-        style={{ padding: '4px 8px', cursor: 'pointer', borderBottom: '1px solid #ddd' }}
+      </button>
+      <button
+        className="context-menu-item"
         onClick={handleTranslate}
       >
         Translate
-      </div>
-      <div
-        style={{ padding: '4px 8px', cursor: 'pointer', borderBottom: !selection ? '1px solid #ddd' : 'none' }}
+      </button>
+      <div className="context-menu-separator" />
+      <button
+        className="context-menu-item"
         onClick={() => {
           if (selection) onDelete()
           onClose()
         }}
       >
         Delete
-      </div>
+      </button>
       {!selection && (
-        <div
-          style={{ 
-            padding: '4px 8px', 
-            cursor: isInsideComponent ? 'not-allowed' : 'pointer', 
-            color: isInsideComponent ? '#999' : '#2d5aa0', 
-            fontWeight: 600,
-          }}
-          onClick={() => {
-            if (!isInsideComponent) {
-              onSetOrigin(contextMenu.bp)
-              onClose()
-            }
-          }}
-          title={isInsideComponent ? 'Cannot set origin inside a component' : undefined}
-        >
-          Set Origin ({contextMenu.bp}bp → 0bp){isInsideComponent ? ' (blocked)' : ''}
-        </div>
+        <>
+          <div className="context-menu-separator" />
+          <button
+            className="context-menu-item"
+            style={{ 
+              cursor: isInsideComponent ? 'not-allowed' : 'pointer', 
+              color: isInsideComponent ? theme.textMuted : theme.accentPrimary, 
+              fontWeight: 600,
+            }}
+            onClick={() => {
+              if (!isInsideComponent) {
+                onSetOrigin(contextMenu.bp)
+                onClose()
+              }
+            }}
+            title={isInsideComponent ? 'Cannot set origin inside a component' : undefined}
+          >
+            Set Origin ({contextMenu.bp}bp → 0bp){isInsideComponent ? ' (blocked)' : ''}
+          </button>
+        </>
       )}
     </div>
   )
 }
-

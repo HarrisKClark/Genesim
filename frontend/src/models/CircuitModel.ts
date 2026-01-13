@@ -47,6 +47,10 @@ export interface SimulationCircuit {
       inhibitorName?: string
       repK?: number
       repN?: number
+      // Inducible promoter params
+      inducerName?: string
+      indK?: number
+      indN?: number
     }
     genes: Array<{
       name: string
@@ -224,6 +228,9 @@ export class CircuitModel {
           inhibitorName: p.inhibitorName,
           repK: p.repK,
           repN: p.repN,
+          inducerName: p.inducerName,
+          indK: p.indK,
+          indN: p.indN,
           }
         })(),
         genes: operon.rbsGenePairs.map(pair => ({

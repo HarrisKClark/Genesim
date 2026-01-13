@@ -1,4 +1,5 @@
 import { DNASelection } from '../../types/dnaTypes'
+import { theme, hexToRgba } from '../../utils/themeUtils'
 
 interface DNASelectionHighlightProps {
   selection: DNASelection | null
@@ -21,6 +22,8 @@ export default function DNASelectionHighlight({
 }: DNASelectionHighlightProps) {
   // In DNA view: selection is shown via base background colors only
   // In abstract view: show a visual highlight overlay
+  
+  const accentColor = theme.accentPrimary
   
   if (!selection) return null
   if (showBasePairs) return null // Only show overlay in abstract view
@@ -47,12 +50,12 @@ export default function DNASelectionHighlight({
         top: `${lineY - (highlightHeight / 2)}px`,
         width: `${width}px`,
         height: `${highlightHeight}px`,
-        backgroundColor: 'rgba(74, 144, 226, 0.25)', // Semi-transparent blue
-        border: '2px solid rgba(74, 144, 226, 0.6)',
+        backgroundColor: hexToRgba(accentColor, 0.25),
+        border: `2px solid ${hexToRgba(accentColor, 0.6)}`,
         borderRadius: '4px',
         pointerEvents: 'none',
         zIndex: 7, // Above components (6) but below cursor (10)
-        boxShadow: '0 0 8px rgba(74, 144, 226, 0.4)',
+        boxShadow: `0 0 8px ${hexToRgba(accentColor, 0.4)}`,
       }}
     />
   )

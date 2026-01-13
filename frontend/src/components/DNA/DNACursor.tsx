@@ -1,3 +1,5 @@
+import { theme } from '../../utils/themeUtils'
+
 interface DNACursorProps {
   cursorVisible: boolean
   cursorPosition: number | null
@@ -12,7 +14,7 @@ interface DNACursorProps {
 export default function DNACursor({
   cursorVisible,
   cursorPosition,
-  showBasePairs: _showBasePairs,
+  showBasePairs,
   cursorPlaced: _cursorPlaced,
   zoom,
   bpToX,
@@ -27,6 +29,11 @@ export default function DNACursor({
   const strandSpacing = Math.max(20, Math.min(40, 20 * zoom))
   const cursorX = bpToX(cursorPosition)
   const cursorHeight = strandSpacing + baseHeight + 10
+  // In abstract view we prefer crisp positioning (no tween) to avoid amplifying perceived jitter.
+  const leftTransition = showBasePairs ? 'left 0.05s ease-out' : 'none'
+
+  // Use theme-aware cursor color - bright for dark/iluvatar modes
+  const cursorColor = theme.cursorColor
 
   return (
     <div
@@ -36,13 +43,13 @@ export default function DNACursor({
         top: `${lineY - strandSpacing / 2 - baseHeight / 2 - 5}px`,
         width: '3px',
         height: `${cursorHeight}px`,
-        background: '#000',
-        boxShadow: '0 0 3px rgba(0, 0, 0, 0.8)',
+        background: cursorColor,
+        boxShadow: `0 0 4px ${cursorColor}`,
         transform: 'translateX(-50%)',
         zIndex: 10, // Higher z-index to ensure cursor is always visible above other elements
         pointerEvents: 'none',
         opacity: 1,
-        transition: 'left 0.05s ease-out', // Smooth movement, no opacity transition
+        transition: leftTransition,
         willChange: 'left', // Optimize for position changes
       }}
     >
@@ -56,7 +63,7 @@ export default function DNACursor({
           height: 0,
           borderLeft: '5px solid transparent',
           borderRight: '5px solid transparent',
-          borderTop: '5px solid #000',
+          borderTop: `5px solid ${cursorColor}`,
           pointerEvents: 'none',
         }}
       />

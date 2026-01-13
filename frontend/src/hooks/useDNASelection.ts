@@ -10,6 +10,7 @@ interface UseDNASelectionProps {
   totalWidth: number
   bpPerPixel: number
   dnaLength: number
+  lineX?: number
   showBasePairs: boolean
   draggingComponentId: string | null
   /**
@@ -40,6 +41,7 @@ export function useDNASelection({
   totalWidth,
   bpPerPixel,
   dnaLength,
+  lineX,
   showBasePairs,
   draggingComponentId,
   isBpSelectable,
@@ -77,7 +79,8 @@ export function useDNASelection({
       totalWidth,
       bpPerPixel,
       dnaLength,
-      showBasePairs
+      showBasePairs,
+      lineX
     )
     if (pos === null) return null
 
@@ -101,7 +104,7 @@ export function useDNASelection({
       right++
     }
     return pos
-  }, [canvasRef, scrollContainerRef, canvasWidth, totalWidth, bpPerPixel, dnaLength, showBasePairs])
+  }, [canvasRef, scrollContainerRef, canvasWidth, totalWidth, bpPerPixel, dnaLength, showBasePairs, lineX])
 
   // Convert cursor position to base index
   const cursorToBaseIndex = useCallback((cursorPos: number): number => {
@@ -116,7 +119,15 @@ export function useDNASelection({
     
     const target = e.target as HTMLElement
     // Don't select if clicking on a component or control or abstract block
-    if (target.closest('.circuit-node') || target.closest('.canvas-controls') || target.closest('.abstract-component-block')) {
+    if (
+      target.closest('.circuit-node') ||
+      target.closest('.canvas-controls') ||
+      target.closest('.abstract-component-block') ||
+      target.closest('.backbone-bar') ||
+      target.closest('.cell-add-circuit') ||
+      target.closest('.cell-delete') ||
+      target.closest('.plasmid-delete')
+    ) {
       return
     }
     
@@ -258,6 +269,9 @@ export function useDNASelection({
           isDragging: false,
           hasMoved: selectionDragRef.current.hasMoved, // Keep hasMoved flag for onClick check
         }
+        
+        // Allow cursor to follow mouse again after selection ends
+        setCursorPlaced(false)
       }
     }
     

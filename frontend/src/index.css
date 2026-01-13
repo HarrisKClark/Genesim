@@ -4,13 +4,149 @@
   box-sizing: border-box;
 }
 
+:root {
+  /* Light mode colors (default) */
+  --bg-primary: #e8e8e8;
+  --bg-secondary: #d4d4d4;
+  --bg-tertiary: #c0c0c0;
+  --bg-input: #f5f5f5;
+  --bg-hover: #ebebeb;
+  --bg-header: #3a3a3a;
+  --bg-dialog: white;
+  --bg-dialog-header: #fafafa;
+  
+  --text-primary: #000;
+  --text-secondary: #333;
+  --text-tertiary: #555;
+  --text-muted: #666;
+  --text-hint: #777;
+  --text-inverse: #e0e0e0;
+  --text-on-accent: #fff;
+  
+  --border-primary: #888;
+  --border-secondary: #aaa;
+  --border-light: #ddd;
+  --border-input: #ccc;
+  --border-cell: #888;
+  
+  --accent-primary: #4a90e2;
+  --accent-hover: #2d5aa0;
+  
+  --shadow-color: rgba(0, 0, 0, 0.15);
+  --overlay-color: rgba(0, 0, 0, 0.35);
+  
+  /* DNA strand colors */
+  --dna-sense: #3b82f6;
+  --dna-antisense: #ef4444;
+  --dna-backbone: #6b7280;
+  
+  /* Plot colors */
+  --plot-bg: #fff;
+  --plot-paper: #fff;
+  --plot-grid: #e0e0e0;
+  --plot-text: #333;
+  
+  /* Cursor color */
+  --cursor-color: #000;
+}
+
+/* Dark mode overrides */
+.dark-mode {
+  --bg-primary: #1a1a2e;
+  --bg-secondary: #252540;
+  --bg-tertiary: #2d2d4a;
+  --bg-input: #353555;
+  --bg-hover: #3d3d5c;
+  --bg-header: #16162a;
+  --bg-dialog: #252540;
+  --bg-dialog-header: #1e1e35;
+  
+  --text-primary: #e8e8f0;
+  --text-secondary: #c8c8d8;
+  --text-tertiary: #a8a8c0;
+  --text-muted: #8888a8;
+  --text-hint: #7878a0;
+  --text-inverse: #e8e8f0;
+  --text-on-accent: #fff;
+  
+  --border-primary: #4a4a6a;
+  --border-secondary: #5a5a7a;
+  --border-light: #3a3a5a;
+  --border-input: #4a4a6a;
+  --border-cell: #5a7a9a;
+  
+  --accent-primary: #6aa0f2;
+  --accent-hover: #8ab8ff;
+  
+  --shadow-color: rgba(0, 0, 0, 0.4);
+  --overlay-color: rgba(0, 0, 0, 0.6);
+  
+  --dna-sense: #5a9aff;
+  --dna-antisense: #ff6b6b;
+  --dna-backbone: #8898a8;
+  
+  --plot-bg: #252540;
+  --plot-paper: #252540;
+  --plot-grid: #3a3a5a;
+  --plot-text: #c8c8d8;
+  
+  /* Cursor color - bright for visibility */
+  --cursor-color: #ffcc00;
+}
+
+/* Iluvatar Biodynamics theme */
+.iluvatar-mode {
+  --bg-primary: #0d0d0d;
+  --bg-secondary: #1a1a1a;
+  --bg-tertiary: #252525;
+  --bg-input: #2a2a2a;
+  --bg-hover: #333333;
+  --bg-header: #0a0a0a;
+  --bg-dialog: #1a1a1a;
+  --bg-dialog-header: #0f0f0f;
+  
+  --text-primary: #ffffff;
+  --text-secondary: #e0e0e0;
+  --text-tertiary: #b0b0b0;
+  --text-muted: #888888;
+  --text-hint: #666666;
+  --text-inverse: #ffffff;
+  --text-on-accent: #0a0a0a;
+  
+  --border-primary: #39ff14;
+  --border-secondary: #2db812;
+  --border-light: #333333;
+  --border-input: #444444;
+  --border-cell: #39ff14;
+  
+  --accent-primary: #39ff14;
+  --accent-hover: #2db812;
+  
+  --shadow-color: rgba(57, 255, 20, 0.15);
+  --overlay-color: rgba(0, 0, 0, 0.8);
+  
+  /* All DNA/circuit elements use green */
+  --dna-sense: #39ff14;
+  --dna-antisense: #2db812;
+  --dna-backbone: #1a6610;
+  
+  --plot-bg: #1a1a1a;
+  --plot-paper: #1a1a1a;
+  --plot-grid: #333333;
+  --plot-text: #e0e0e0;
+  
+  /* Cursor color - magenta for contrast with green */
+  --cursor-color: #ff00ff;
+}
+
 body {
   font-family: 'Courier New', 'Monaco', 'Menlo', monospace;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   height: 100vh;
   overflow: hidden;
-  background: #e8e8e8;
+  background: var(--bg-primary);
+  color: var(--text-primary);
 }
 
 #root {
@@ -21,4 +157,3 @@ body {
 code {
   font-family: 'Courier New', 'Monaco', 'Menlo', monospace;
 }
-

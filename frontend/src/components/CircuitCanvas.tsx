@@ -3,6 +3,7 @@ import { useDrop } from 'react-dnd'
 import CircuitNode from './CircuitNode'
 import './CircuitCanvas.css'
 import { CircuitComponent } from '../types/dnaTypes'
+import type { BackboneSpec } from '../types/backboneTypes'
 import { COMPONENT_COLORS, COMPONENT_SIZES, DNA_LENGTH, generateDNA } from '../constants/circuitConstants'
 import { useUndoRedo } from '../hooks/useUndoRedo'
 import { useCustomScrollbar } from '../hooks/useCustomScrollbar'
@@ -20,18 +21,54 @@ import DragPreviewOverlay from './Canvas/DragPreviewOverlay'
 import CanvasStatusBar from './Canvas/CanvasStatusBar'
 import OperonHighlight from './Analysis/OperonHighlight'
 import { useCircuitAnalysis } from '../hooks/useCircuitAnalysis'
+import { CircuitModel } from '../models/CircuitModel'
+import { getBpFromMouse as getBpFromMouseUtil, getCursorPositionFromMouse as getCursorPositionFromMouseUtil } from '../utils/coordinateUtils'
 import {
   snapToValidInsertionPosition,
   shiftComponentPositionsAtOrAfter,
   migrateComponent,
 } from '../utils/componentPositioning'
 import { buildExpandedLayout } from '../utils/expandedLayout'
+import { theme, hexToRgba } from '../utils/themeUtils'
+// Note: useCellLayout hook is available for further refactoring
+// import { useCellLayout } from '../hooks/useCellLayout'
 
 interface CircuitCanvasProps {
   onCircuitChange: (data: CircuitComponent[]) => void
+  onCircuitChangeForPlasmid?: (cellId: string, plasmidIndex: number, data: CircuitComponent[]) => void
   circuitData: CircuitComponent[] | null
   zoomSensitivity: number
   fileName?: string
+  backbone?: BackboneSpec
+  onEditBackbone?: () => void
+  onEditCell?: (cellId: string) => void
+  cellType?: string
+  cellName?: string
+  onAddCircuitInCell?: () => void
+  onAddCircuitInCellForCell?: (cellId: string) => void
+  isActive?: boolean
+  onActivate?: () => void
+  // Culture rendering (multiple cells in one panel)
+  cultureCells?: Array<{
+    id: string
+    cellType: string
+    cellName: string
+    circuits: Array<{
+      id: string
+      backbone: BackboneSpec
+      components: CircuitComponent[]
+      dnaLength?: number
+      dnaSequence?: string[]
+    }>
+    activeCircuitIndex: number
+  }>
+  activeCellId?: string
+  onActivateCell?: (id: string) => void
+  onAddCell?: () => void
+  onDeleteCell?: (id: string) => void
+  onDeletePlasmid?: (cellId: string, plasmidId: string) => void
+  onActivatePlasmid?: (cellId: string, plasmidIndex: number) => void
+  onPlasmidDnaChange?: (cellId: string, plasmidIndex: number, dnaSequence: string[], dnaLength: number) => void
   // Operon analysis props
   showOperonHighlights?: boolean
   selectedOperonId?: string | null
@@ -42,18 +79,53 @@ interface CircuitCanvasProps {
 
 export default function CircuitCanvas({ 
   onCircuitChange, 
+  onCircuitChangeForPlasmid,
   circuitData, 
   fileName = 'Untitled Circuit',
+  backbone,
+  onEditBackbone,
+  onEditCell,
+  cellType,
+  cellName,
+  onAddCircuitInCell,
+  onAddCircuitInCellForCell,
+  isActive = true,
+  onActivate,
+  cultureCells,
+  activeCellId,
+  onActivateCell,
+  onAddCell,
+  onDeleteCell,
+  onDeletePlasmid,
+  onActivatePlasmid,
+  onPlasmidDnaChange,
   showOperonHighlights = false,
   selectedOperonId = null,
   onOperonClick,
   onAnalysisUpdate,
   onPartContextMenu,
 }: CircuitCanvasProps) {
+  // Get theme colors - recompute on each render to pick up theme changes
+  const accentColor = theme.accentPrimary
+  const bgSecondary = theme.bgSecondary
+  
   const canvasRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const hasInitialCenteredRef = useRef(false)
   const prevZoomRef = useRef<number | null>(null)
+  // Cursor hide is debounced; keep a ref so we can cancel stale timers and prevent flicker.
+  const cursorHideTimerRef = useRef<number | null>(null)
+  // Reduce cursor jitter by only updating position when it actually changes.
+  const lastCursorPositionRef = useRef<number | null>(null)
+  // In abstract view we arm the cursor when the mouse is near the DNA band; used to start selection on mousedown.
+  const abstractCursorArmedRef = useRef(false)
+  // Allows us to start selection from handlers declared before the selection hook.
+  const handleBaseMouseDownRef = useRef<((e: React.MouseEvent) => void) | null>(null)
+  const [backboneSelected, setBackboneSelected] = useState(false)
+  // In abstract view, the cursor should appear near whichever plasmid row the mouse is near,
+  // without forcing the "active plasmid" to change just by hovering.
+  const [cursorLineY, setCursorLineY] = useState<number | null>(null)
+  const [cursorLineX, setCursorLineX] = useState<number | null>(null)
   const [components, setComponents] = useState<CircuitComponent[]>(() => {
     const initial = circuitData || []
     // Migrate old components to new format
@@ -78,18 +150,107 @@ export default function CircuitCanvas({
 
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [overlappingComponentIds, setOverlappingComponentIds] = useState<string[]>([])
-  // Background DNA (does not include component bases)
+  // Background DNA (ACTIVE plasmid only; other plasmids use cultureCells[].circuits[].dnaSequence)
   const [dnaSequence, setDnaSequence] = useState<string[]>(generateDNA(DNA_LENGTH))
   const [dnaLength, setDnaLength] = useState(DNA_LENGTH)
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; bp: number } | null>(null)
-  
+  const lastSyncedDnaRef = useRef<{ cellId: string; plasmidIndex: number; dnaLength: number; dnaSequence: string[] } | null>(null)
+
+  const activeCellIdForDna = useMemo(() => {
+    if (!cultureCells || cultureCells.length === 0) return '__single__'
+    return activeCellId ?? cultureCells[0]?.id ?? '__single__'
+  }, [cultureCells, activeCellId])
+
+  const activePlasmidIndexForDna = useMemo(() => {
+    if (!cultureCells || cultureCells.length === 0) return 0
+    const cell = cultureCells.find((c) => c.id === activeCellIdForDna) ?? cultureCells[0]
+    return Math.max(0, Math.min((cell?.circuits?.length ?? 1) - 1, Number(cell?.activeCircuitIndex ?? 0)))
+  }, [cultureCells, activeCellIdForDna])
+
+  // Track which plasmid we last synced FROM props (to detect plasmid switches)
+  const lastSyncedPlasmidRef = useRef<{ cellId: string; plasmidIndex: number } | null>(null)
+
+  // Sync ACTIVE plasmid DNA from props into local state ONLY when switching to a different plasmid.
+  // Do NOT re-sync on every cultureCells change - that causes oscillation with local edits.
+  useEffect(() => {
+    if (!cultureCells || cultureCells.length === 0) return
+    const lastSynced = lastSyncedPlasmidRef.current
+    // Only sync if we're switching to a DIFFERENT plasmid
+    if (lastSynced && lastSynced.cellId === activeCellIdForDna && lastSynced.plasmidIndex === activePlasmidIndexForDna) {
+      return // Same plasmid - don't overwrite local edits
+    }
+    const cell = cultureCells.find((c) => c.id === activeCellIdForDna) ?? cultureCells[0]
+    const plasmid = cell?.circuits?.[activePlasmidIndexForDna]
+    const nextLen = Number(plasmid?.dnaLength ?? DNA_LENGTH)
+    const nextSeq = Array.isArray(plasmid?.dnaSequence) ? (plasmid!.dnaSequence as string[]) : generateDNA(nextLen)
+    lastSyncedPlasmidRef.current = { cellId: activeCellIdForDna, plasmidIndex: activePlasmidIndexForDna }
+    lastSyncedDnaRef.current = {
+      cellId: activeCellIdForDna,
+      plasmidIndex: activePlasmidIndexForDna,
+      dnaLength: nextLen,
+      dnaSequence: nextSeq,
+    }
+    setDnaLength(nextLen)
+    setDnaSequence(nextSeq)
+  }, [cultureCells, activeCellIdForDna, activePlasmidIndexForDna])
+
+  // Push local DNA edits back up to Layout for the active plasmid.
+  // This runs whenever local dnaSequence/dnaLength changes.
+  useEffect(() => {
+    if (!cultureCells || cultureCells.length === 0) return
+    const last = lastSyncedDnaRef.current
+    // If we just synced from props (same values), don't push back up.
+    if (
+      last &&
+      last.cellId === activeCellIdForDna &&
+      last.plasmidIndex === activePlasmidIndexForDna &&
+      last.dnaLength === dnaLength &&
+      last.dnaSequence === dnaSequence
+    ) {
+      return
+    }
+    // Update lastSyncedDnaRef so we know this is our latest local state
+    lastSyncedDnaRef.current = {
+      cellId: activeCellIdForDna,
+      plasmidIndex: activePlasmidIndexForDna,
+      dnaLength,
+      dnaSequence,
+    }
+    onPlasmidDnaChange?.(activeCellIdForDna, activePlasmidIndexForDna, dnaSequence, dnaLength)
+  }, [cultureCells, onPlasmidDnaChange, activeCellIdForDna, activePlasmidIndexForDna, dnaSequence, dnaLength])
+
   // Expanded length (background + inserted component bases). Used for view/canvas sizing.
+  // If we are rendering a culture, size to the max length across ALL plasmids in ALL cells so nothing "shrinks"
+  // when the active cell/plasmid changes.
   const expandedLengthBase = useMemo(() => {
-    const inserted = components
-      .filter((c) => c.position !== undefined)
-      .reduce((acc, c) => acc + Math.max(0, Math.round(c.length)), 0)
-    return Math.max(0, dnaLength + inserted)
-  }, [dnaLength, components])
+    const baseFor = (dnaLen: number, comps: CircuitComponent[]) => {
+      const placedComps = comps.filter((c) => c.position !== undefined)
+      const totalInserted = placedComps.reduce((acc, c) => acc + Math.max(0, Math.round(c.length)), 0)
+      let len = dnaLen + totalInserted
+      // Also ensure we accommodate the highest-positioned component
+      for (const c of placedComps) {
+        const compEnd = Math.round(c.position!) + Math.max(0, Math.round(c.length))
+        if (compEnd > len) len = compEnd
+      }
+      return len
+    }
+
+    if (!cultureCells || cultureCells.length === 0) return Math.max(0, baseFor(dnaLength, components))
+
+    let maxLen = baseFor(dnaLength, components)
+    for (const cell of cultureCells) {
+      const circuits = cell.circuits ?? []
+      for (let pIdx = 0; pIdx < circuits.length; pIdx++) {
+        // SKIP active plasmid - already counted via local state to avoid dual-source sizing oscillation
+        if (cell.id === activeCellIdForDna && pIdx === activePlasmidIndexForDna) continue
+        const plasmid = circuits[pIdx]
+        const comps = plasmid?.components ?? []
+        const dnaLen = Number(plasmid?.dnaLength ?? DNA_LENGTH)
+        maxLen = Math.max(maxLen, baseFor(dnaLen, comps))
+      }
+    }
+    return Math.max(0, maxLen)
+  }, [dnaLength, components, cultureCells, activeCellIdForDna, activePlasmidIndexForDna])
   
   // View state hook (zoom, pan, coordinate conversion, canvas dimensions)
   const viewState = useViewState({
@@ -102,7 +263,6 @@ export default function CircuitCanvas({
   const {
     zoom,
     setZoom,
-    handleWheel,
     isDragging,
     setIsDragging,
     dragStart,
@@ -120,10 +280,8 @@ export default function CircuitCanvas({
     bpPerPixel,
     totalWidth,
     bpToX,
-    getBpFromMouse,
-    getCursorPositionFromMouse,
   } = viewState
-  
+
   // Drag preview state for component insertion
   const [dragPreviewPosition, setDragPreviewPosition] = useState<{
     bp: number
@@ -132,6 +290,17 @@ export default function CircuitCanvas({
     componentName: string
     blockedPartIds?: string[]
     snappedFromBlocked?: boolean
+    targetLineY?: number
+    targetLineX?: number
+    targetCellId?: string
+    targetPlasmidIndex?: number
+  } | null>(null)
+
+  const [dragTargetCellFrame, setDragTargetCellFrame] = useState<{
+    left: number
+    top: number
+    width: number
+    height: number
   } | null>(null)
 
   // Expanded layout (background + inserted component bases). Used for rendering and mouse coordinate mapping.
@@ -155,6 +324,44 @@ export default function CircuitCanvas({
       extraInsertions: extra,
     })
   }, [dnaSequence, components, dragPreviewPosition, showBasePairs])
+
+  // Plasmid-specific width/centering: each plasmid keeps its own expanded width and is centered within the "lane"
+  // defined by the max-width plasmid (totalWidth from viewState / expandedLengthBase).
+  const laneLineX = lineX
+  const laneTotalWidth = totalWidth
+  const activeExpandedLength = expandedLayout.expandedLength
+  const activeTotalWidthPx = useMemo(() => activeExpandedLength / bpPerPixel, [activeExpandedLength, bpPerPixel])
+  const activeLineX = useMemo(
+    () => Math.round(laneLineX + Math.max(0, (laneTotalWidth - activeTotalWidthPx) / 2)),
+    [laneLineX, laneTotalWidth, activeTotalWidthPx]
+  )
+
+  const getBpFromMouseActive = useCallback((e: React.MouseEvent | MouseEvent) => {
+    return getBpFromMouseUtil(
+      e,
+      canvasRef,
+      scrollContainerRef,
+      canvasWidth,
+      activeTotalWidthPx,
+      bpPerPixel,
+      expandedLayout.expandedLength,
+      activeLineX
+    )
+  }, [canvasRef, scrollContainerRef, canvasWidth, activeTotalWidthPx, bpPerPixel, expandedLayout.expandedLength, activeLineX])
+
+  const getCursorPositionFromMouseActive = useCallback((e: React.MouseEvent | MouseEvent) => {
+    return getCursorPositionFromMouseUtil(
+      e,
+      canvasRef,
+      scrollContainerRef,
+      canvasWidth,
+      activeTotalWidthPx,
+      bpPerPixel,
+      expandedLayout.expandedLength,
+      showBasePairs,
+      activeLineX
+    )
+  }, [canvasRef, scrollContainerRef, canvasWidth, activeTotalWidthPx, bpPerPixel, expandedLayout.expandedLength, showBasePairs, activeLineX])
 
   // NOTE: Operon/ORF analysis is now performed in expanded coordinate space, so no background→expanded mapping is needed.
 
@@ -186,6 +393,162 @@ export default function CircuitCanvas({
   
   const strandWidthPx = totalWidth
 
+  // Culture vertical layout (all cells in one panel)
+  // Cell vertical positioning is dynamic (based on plasmid count), so avoid fixed per-cell spacing.
+  // Plasmid spacing: intentionally tighter; user asked to halve whitespace between plasmids.
+  const plasmidSpacingPx = useMemo(() => Math.max(140, Math.round((210 + 40 * zoom) * 0.75)), [zoom])
+  // If `cultureCells` is provided, we render exactly that (even if empty for a blank project).
+  // Otherwise, fall back to a single-cell view.
+  const renderCells =
+    cultureCells !== undefined
+      ? cultureCells
+      : [
+          {
+            id: '__single__',
+            cellType: cellType ?? 'MG1655',
+            cellName: cellName ?? 'Repressilator',
+            circuits: [
+              {
+                id: '__single_plasmid__',
+                backbone:
+                  backbone ?? { copyNumber: 10, originName: 'ColE1', resistances: [{ code: 'Cm', name: 'Chloramphenicol' }] },
+                components,
+              },
+            ],
+            activeCircuitIndex: 0,
+          },
+        ]
+  const activeIdx = useMemo(() => {
+    if (!activeCellId) return 0
+    const idx = renderCells.findIndex((c) => c.id === activeCellId)
+    return idx >= 0 ? idx : 0
+  }, [renderCells, activeCellId])
+  const baseLineY = lineY
+  const activePlasmidIdx = renderCells[activeIdx]?.activeCircuitIndex ?? 0
+
+  const cellGapPx = useMemo(() => Math.max(34, Math.round(44 * zoom)), [zoom])
+
+  const computeCellHeightPx = useCallback((plasmidCount: number) => {
+    const framePadYTop = Math.round(Math.max(34, Math.min(60, 46 * zoom)))
+    const framePadYBottom = Math.round(Math.max(34, Math.min(70, 52 * zoom)))
+    const hasBackbone = showAbstractView && !showBasePairs
+    const bbGap = Math.max(55, Math.min(95, 70 * zoom))
+    const bbHeight = Math.round(Math.max(18, Math.min(26, 20 * zoom)))
+
+    const n = Math.max(1, plasmidCount || 1)
+    const A = Math.round(strandSpacing / 2 + baseHeight / 2 + framePadYTop)
+    const markerBottomOffset = Math.round(strandSpacing / 2 + baseHeight / 2 + 12 + 40)
+    const backboneBottomOffset = Math.round(strandSpacing / 2 + baseHeight / 2 + bbGap + bbHeight)
+    const B = hasBackbone ? Math.max(markerBottomOffset, backboneBottomOffset) : markerBottomOffset
+    return Math.round(A + (n - 1) * plasmidSpacingPx + B + framePadYBottom)
+  }, [zoom, showAbstractView, showBasePairs, strandSpacing, baseHeight, plasmidSpacingPx])
+
+  const cellLineYs = useMemo(() => {
+    const ys: number[] = []
+    let y = baseLineY
+    for (const cell of renderCells) {
+      ys.push(y)
+      const n = cell.circuits?.length ?? 1
+      y = y + computeCellHeightPx(n) + cellGapPx
+    }
+    return ys
+  }, [renderCells, baseLineY, computeCellHeightPx, cellGapPx])
+
+  const activeCellLineY = cellLineYs[activeIdx] ?? baseLineY
+  const activeLineY = activeCellLineY + activePlasmidIdx * plasmidSpacingPx
+  const cursorRenderLineY = (showBasePairs ? activeLineY : (cursorLineY ?? activeLineY))
+  const cursorRenderLineX = (showBasePairs ? activeLineX : (cursorLineX ?? activeLineX))
+
+  const computeCellFrame = useCallback(
+    (cellLineY: number, plasmidCount: number) => {
+      const framePadX = Math.round(Math.max(90, Math.min(150, 110 * zoom)))
+      const framePadYTop = Math.round(Math.max(34, Math.min(60, 46 * zoom)))
+      // Extra bottom padding to prevent the add-plasmid button from overlapping the backbone
+      const framePadYBottom = Math.round(Math.max(54, Math.min(90, 72 * zoom)))
+      const frameLeft = Math.round(lineX - framePadX)
+      const frameWidth = Math.round(totalWidth + framePadX * 2)
+
+      const hasBackbone = showAbstractView && !showBasePairs
+      const bbGap = Math.max(55, Math.min(95, 70 * zoom))
+      const bbHeight = Math.round(Math.max(18, Math.min(26, 20 * zoom)))
+
+      const n = Math.max(1, plasmidCount || 1)
+      let top = Infinity
+      let bottom = -Infinity
+      for (let i = 0; i < n; i++) {
+        const y = cellLineY + i * plasmidSpacingPx
+        const frameTop = Math.round(y - strandSpacing / 2 - baseHeight / 2 - framePadYTop)
+        const markerBottom = Math.round(y + strandSpacing / 2 + baseHeight / 2 + 12 + 40)
+        const bbY = Math.round(y + strandSpacing / 2 + baseHeight / 2 + bbGap)
+        const circuitBottom = hasBackbone ? Math.max(markerBottom, bbY + bbHeight) : markerBottom
+        const frameBottom = Math.round(circuitBottom)
+        top = Math.min(top, frameTop)
+        bottom = Math.max(bottom, frameBottom)
+      }
+      const frameTopFinal = Math.round(top)
+      const frameBottomFinal = Math.round(bottom + framePadYBottom)
+      return { frameLeft, frameTop: frameTopFinal, frameWidth, frameBottom: frameBottomFinal }
+    },
+    [zoom, strandSpacing, baseHeight, lineX, totalWidth, showAbstractView, showBasePairs, plasmidSpacingPx]
+  )
+
+  const getExpandedLengthForComponents = useCallback((dnaLen: number, comps: CircuitComponent[]) => {
+    const placedComps = comps.filter((c) => c.position !== undefined)
+    const totalInserted = placedComps.reduce((acc, c) => acc + Math.max(0, Math.round(c.length)), 0)
+    let len = dnaLen + totalInserted
+    // Also ensure we accommodate the highest-positioned component
+    for (const c of placedComps) {
+      const compEnd = Math.round(c.position!) + Math.max(0, Math.round(c.length))
+      if (compEnd > len) len = compEnd
+    }
+    return len
+  }, [])
+
+  const getHoverPlasmidTargetFromClientOffset = useCallback((offset: { x: number; y: number }) => {
+    if (!canvasRef.current || !scrollContainerRef.current) return null
+    const rect = canvasRef.current.getBoundingClientRect()
+    const scrollLeft = scrollContainerRef.current.scrollLeft
+    const scrollTop = scrollContainerRef.current.scrollTop
+    const xAbs = (offset.x - rect.left) + scrollLeft
+    const yAbs = (offset.y - rect.top) + scrollTop
+
+    for (let idx = 0; idx < renderCells.length; idx++) {
+      const cell = renderCells[idx]
+      const cellLineY = cellLineYs[idx] ?? baseLineY
+      const plasmidCount = cell.circuits?.length ?? 1
+      const { frameLeft, frameTop, frameWidth, frameBottom } = computeCellFrame(cellLineY, plasmidCount)
+      if (xAbs >= frameLeft && xAbs <= frameLeft + frameWidth && yAbs >= frameTop && yAbs <= frameBottom) {
+        const rawPlasmidIdx = Math.round((yAbs - cellLineY) / plasmidSpacingPx)
+        const plasmidIdx = Math.max(0, Math.min(plasmidCount - 1, rawPlasmidIdx))
+        const plasmidLineY = cellLineY + plasmidIdx * plasmidSpacingPx
+        const comps =
+          cultureCells && cultureCells.length > 0
+            ? (cultureCells.find((c) => c.id === cell.id)?.circuits?.[plasmidIdx]?.components ?? [])
+            : cell.circuits?.[plasmidIdx]?.components ?? []
+        const dnaLenRaw =
+          cultureCells && cultureCells.length > 0
+            ? (cultureCells.find((c) => c.id === cell.id)?.circuits?.[plasmidIdx]?.dnaLength ?? DNA_LENGTH)
+            : ((cell.circuits?.[plasmidIdx] as any)?.dnaLength ?? DNA_LENGTH)
+        const expandedLen = getExpandedLengthForComponents(Number(dnaLenRaw ?? DNA_LENGTH), comps)
+        const plasmidTotalWidth = expandedLen / bpPerPixel
+        const plasmidLineX = Math.round(laneLineX + Math.max(0, (laneTotalWidth - plasmidTotalWidth) / 2))
+        return { cellId: cell.id, cellIdx: idx, plasmidIdx, plasmidLineY, plasmidLineX, plasmidTotalWidth }
+      }
+    }
+    return null
+  }, [
+    renderCells,
+    cellLineYs,
+    baseLineY,
+    computeCellFrame,
+    plasmidSpacingPx,
+    cultureCells,
+    getExpandedLengthForComponents,
+    bpPerPixel,
+    laneLineX,
+    laneTotalWidth,
+  ])
+
   const isOriginInsideComponent = useCallback((originBp: number) => {
     // Setting origin at a boundary that cuts through a component would split it.
     // Allow origin exactly at component start/end boundaries, but block inside: (start, end).
@@ -202,12 +565,15 @@ export default function CircuitCanvas({
     components,
     // IMPORTANT: Operons/ORFs must be analyzed in expanded coordinate space.
     // Otherwise, downstream parts beyond background dnaLength get truncated and cause false "missing terminator".
-    dnaLength: expandedLengthBase,
+    // In multi-plasmid mode, analyze the ACTIVE plasmid’s expanded length (not the max across the culture),
+    // so operon coordinates and rendering stay aligned.
+    dnaLength: expandedLayout.expandedLength,
     enabled: true, // Always run analysis
   })
   
   // Notify parent of analysis updates
   useEffect(() => {
+    if (!isActive) return
     if (onAnalysisUpdate) {
       onAnalysisUpdate(circuitAnalysis)
     }
@@ -217,6 +583,29 @@ export default function CircuitCanvas({
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (e.button !== 0) return
     if (selectionDragRef.current.isDragging) return
+
+    // In culture mode (multiple plasmids), clicking in a cell should activate the closest plasmid
+    // so subsequent drag/drop edits apply to the intended plasmid.
+    if (!showBasePairs && cultureCells && cultureCells.length > 0 && canvasRef.current && scrollContainerRef.current) {
+      const rect = canvasRef.current.getBoundingClientRect()
+      const scrollLeft = scrollContainerRef.current.scrollLeft
+      const scrollTop = scrollContainerRef.current.scrollTop
+      const xAbs = (e.clientX - rect.left) + scrollLeft
+      const yAbs = (e.clientY - rect.top) + scrollTop
+      for (let idx = 0; idx < renderCells.length; idx++) {
+        const cell = renderCells[idx]
+        const cellLineY = cellLineYs[idx] ?? baseLineY
+        const plasmidCount = cell.circuits?.length ?? 1
+        const { frameLeft, frameTop, frameWidth, frameBottom } = computeCellFrame(cellLineY, plasmidCount)
+        if (xAbs >= frameLeft && xAbs <= frameLeft + frameWidth && yAbs >= frameTop && yAbs <= frameBottom) {
+          const rawPlasmidIdx = Math.round((yAbs - cellLineY) / plasmidSpacingPx)
+          const plasmidIdx = Math.max(0, Math.min(plasmidCount - 1, rawPlasmidIdx))
+          onActivateCell?.(cell.id)
+          onActivatePlasmid?.(cell.id, plasmidIdx)
+          break
+        }
+      }
+    }
     
     const target = e.target as HTMLElement
     // If user is interacting with a placed part, don't pan the canvas.
@@ -227,7 +616,34 @@ export default function CircuitCanvas({
       return
     }
     
-    if (target.hasAttribute('data-bp-index') || target.closest('[data-bp-index]')) {
+    // DNA view: clicking on a base pair should start selection, not pan
+    if (showBasePairs && (target.hasAttribute('data-bp-index') || target.closest('[data-bp-index]'))) {
+      setBackboneSelected(false)
+      e.preventDefault()
+      e.stopPropagation()
+      handleBaseMouseDownRef.current?.(e)
+      return
+    }
+
+    // Both views: if the cursor is armed near the DNA band, clicking and dragging should start DNA selection.
+    // This is intentionally generous and overrides other empty-canvas drags.
+    if (abstractCursorArmedRef.current) {
+      if (
+        target.closest('.dna-part-box') ||
+        target.closest('.dna-part-delete') ||
+        target.closest('.circuit-node') ||
+        target.closest('.canvas-controls') ||
+        target.closest('.abstract-component-block') ||
+        target.closest('.custom-scrollbar-horizontal') ||
+        target.closest('.selection-info') ||
+        target.closest('.backbone-bar')
+      ) {
+        return
+      }
+      setBackboneSelected(false)
+      e.preventDefault()
+      e.stopPropagation()
+      handleBaseMouseDownRef.current?.(e)
       return
     }
     
@@ -242,7 +658,17 @@ export default function CircuitCanvas({
         scrollLeft: scrollContainerRef.current.scrollLeft,
       })
     }
-  }, [showBasePairs])
+  }, [
+    showBasePairs,
+    cultureCells,
+    renderCells,
+    cellLineYs,
+    baseLineY,
+    computeCellFrame,
+    plasmidSpacingPx,
+    onActivateCell,
+    onActivatePlasmid,
+  ])
 
   useEffect(() => {
     if (!isDragging || !showBasePairs) return
@@ -266,29 +692,8 @@ export default function CircuitCanvas({
     }
   }, [isDragging, dragStart, showBasePairs])
 
-  // Handle zoom via scroll container wheel events
-  useEffect(() => {
-    if (!scrollContainerRef.current) return
-    
-    const container = scrollContainerRef.current
-    
-    const handleWheel = (e: WheelEvent) => {
-      e.preventDefault()
-      e.stopPropagation()
-      
-      const zoomFactor = 1.1
-      const zoomDirection = e.deltaY > 0 ? 1 / zoomFactor : zoomFactor
-      setZoom((prevZoom) => {
-        const newZoom = Math.max(0.5, Math.min(10, prevZoom * zoomDirection))
-        return newZoom
-      })
-    }
-    
-    container.addEventListener('wheel', handleWheel, { passive: false })
-    return () => {
-      container.removeEventListener('wheel', handleWheel)
-    }
-  }, [])
+  // Scroll-to-zoom has been removed. Scrolling now only scrolls the canvas vertically.
+  // Zoom is controlled via the +/- buttons in the header.
 
   // Selection hook
   const {
@@ -307,9 +712,10 @@ export default function CircuitCanvas({
     canvasRef,
     scrollContainerRef,
     canvasWidth,
-    totalWidth,
+    totalWidth: activeTotalWidthPx,
     bpPerPixel,
     dnaLength: expandedLayout.expandedLength,
+    lineX: activeLineX,
     showBasePairs,
     draggingComponentId,
     isBpSelectable: (bpIdx) => !expandedLayout.isComponentBaseIndex(bpIdx),
@@ -318,6 +724,172 @@ export default function CircuitCanvas({
     components,
     onOverlappingComponentsChange: setOverlappingComponentIds,
   })
+  // Keep latest selection starter in a ref for pre-hook handlers (abstract view mousedown override).
+  handleBaseMouseDownRef.current = handleBaseMouseDown
+
+  // Global cursor: robust geometry snap for both abstract and DNA view (no reliance on hover/leave of specific layers).
+  useEffect(() => {
+    if (!isActive) return
+
+    const hideIfAllowed = () => {
+      if (selectionDragRef.current.isDragging) return
+      if (selection) return
+      if (cursorHideTimerRef.current !== null) {
+        window.clearTimeout(cursorHideTimerRef.current)
+        cursorHideTimerRef.current = null
+      }
+      setCursorVisible(false)
+      setCursorPosition(null)
+      setCursorLineY(null)
+      lastCursorPositionRef.current = null
+    }
+
+    const onMove = (e: MouseEvent) => {
+      if (!canvasRef.current || !scrollContainerRef.current) return
+      if (draggingPlacedPart) return
+      if (selectionDragRef.current.isDragging) return
+
+      // Don't activate DNA cursor when hovering draggable part blocks/controls.
+      const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null
+      if (
+        el?.closest?.('.abstract-component-block') ||
+        el?.closest?.('.dna-part-box') ||
+        el?.closest?.('.dna-part-delete') ||
+        el?.closest?.('.canvas-controls') ||
+        el?.closest?.('.custom-scrollbar-horizontal') ||
+        el?.closest?.('.selection-info') ||
+        el?.closest?.('.backbone-bar') ||
+        el?.closest?.('.cell-add-circuit') ||
+        el?.closest?.('.cell-delete') ||
+        el?.closest?.('.plasmid-delete')
+      ) {
+        abstractCursorArmedRef.current = false
+        hideIfAllowed()
+        return
+      }
+
+      const rect = canvasRef.current.getBoundingClientRect()
+      const insideCanvas =
+        e.clientX >= rect.left &&
+        e.clientX <= rect.right &&
+        e.clientY >= rect.top &&
+        e.clientY <= rect.bottom
+      if (!insideCanvas) {
+        abstractCursorArmedRef.current = false
+        hideIfAllowed()
+        return
+      }
+
+      const scrollTop = scrollContainerRef.current.scrollTop
+      const yAbs = (e.clientY - rect.top) + scrollTop
+
+      // Find which cell/plasmid line the mouse is closest to (within a generous band).
+      let hoveredCellIdx: number | null = null
+      for (let idx = 0; idx < renderCells.length; idx++) {
+        const cell = renderCells[idx]
+        const cellLineY = cellLineYs[idx] ?? baseLineY
+        const plasmidCount = cell.circuits?.length ?? 1
+        const { frameLeft, frameTop, frameWidth, frameBottom } = computeCellFrame(cellLineY, plasmidCount)
+        const xAbs = (e.clientX - rect.left) + scrollContainerRef.current.scrollLeft
+        if (xAbs >= frameLeft && xAbs <= frameLeft + frameWidth && yAbs >= frameTop && yAbs <= frameBottom) {
+          hoveredCellIdx = idx
+          break
+        }
+      }
+
+      // If not over a cell at all, don't show cursor.
+      if (hoveredCellIdx === null) {
+        abstractCursorArmedRef.current = false
+        hideIfAllowed()
+        return
+      }
+
+      const hoveredCell = renderCells[hoveredCellIdx]
+      const hoveredCellLineY = cellLineYs[hoveredCellIdx] ?? baseLineY
+      const hoveredPlasmidCount = hoveredCell.circuits?.length ?? 1
+      // In DNA view, use tighter band around the DNA strands
+      const band = showBasePairs 
+        ? Math.max(60, (strandSpacing + baseHeight) / 2 + 20)
+        : Math.max(140, (strandSpacing + baseHeight) / 2 + 90)
+      const rawPlasmidIdx = Math.round((yAbs - hoveredCellLineY) / plasmidSpacingPx)
+      const plasmidIdx = Math.max(0, Math.min(hoveredPlasmidCount - 1, rawPlasmidIdx))
+      const plasmidLineY = hoveredCellLineY + plasmidIdx * plasmidSpacingPx
+      if (Math.abs(yAbs - plasmidLineY) > band) {
+        abstractCursorArmedRef.current = false
+        hideIfAllowed()
+        return
+      }
+
+      // Important: do NOT switch the active cell/plasmid just by hovering.
+      // Hover-based activation caused confusing "random" circuit changes.
+
+      // Cancel any pending hide.
+      if (cursorHideTimerRef.current !== null) {
+        window.clearTimeout(cursorHideTimerRef.current)
+        cursorHideTimerRef.current = null
+      }
+
+      // Get the hovered plasmid's actual size and position (not the active one)
+      const hoveredPlasmidData = cultureCells?.find((c) => c.id === hoveredCell.id)?.circuits?.[plasmidIdx]
+      const hoveredDnaLen = Number(hoveredPlasmidData?.dnaLength ?? DNA_LENGTH)
+      const hoveredComps = hoveredPlasmidData?.components ?? []
+      const hoveredExpandedLen = getExpandedLengthForComponents(hoveredDnaLen, hoveredComps)
+      const hoveredTotalWidthPx = hoveredExpandedLen / bpPerPixel
+      // Center within the lane (laneLineX/laneTotalWidth are the global lane bounds)
+      const hoveredLineX = Math.round(laneLineX + Math.max(0, (laneTotalWidth - hoveredTotalWidthPx) / 2))
+
+      const scrollLeft = scrollContainerRef.current.scrollLeft
+      const x = (e.clientX - rect.left) + scrollLeft - hoveredLineX
+      // Require mouse X to be near the strand too (avoid cursor popping up far away and then clamping).
+      const xMarginPx = 80
+      if (x < -xMarginPx || x > hoveredTotalWidthPx + xMarginPx) {
+        abstractCursorArmedRef.current = false
+        hideIfAllowed()
+        return
+      }
+      const rawPos = Math.round(x * bpPerPixel)
+      const cursorPos = Math.max(0, Math.min(hoveredExpandedLen, rawPos))
+      abstractCursorArmedRef.current = true
+
+      if (lastCursorPositionRef.current !== cursorPos) {
+        lastCursorPositionRef.current = cursorPos
+        setCursorPosition(cursorPos)
+      }
+      // In abstract view, track which plasmid line for cursor rendering
+      // In DNA view, cursor uses activeLineY/activeLineX so we don't need these
+      if (!showBasePairs) {
+        setCursorLineY(plasmidLineY)
+        setCursorLineX(hoveredLineX)
+      }
+      setCursorVisible(true)
+    }
+
+    window.addEventListener('mousemove', onMove, { passive: true })
+    return () => window.removeEventListener('mousemove', onMove)
+  }, [
+    isActive,
+    showBasePairs,
+    draggingPlacedPart,
+    selection,
+    lineX,
+    lineY,
+    bpPerPixel,
+    strandSpacing,
+    baseHeight,
+    expandedLayout.expandedLength,
+    totalWidth,
+    setCursorVisible,
+    setCursorPosition,
+    renderCells,
+    cultureCells,
+    activeCellId,
+    onActivateCell,
+    onActivatePlasmid,
+    cellLineYs,
+    baseLineY,
+    computeCellFrame,
+    plasmidSpacingPx,
+  ])
 
   // Undo/Redo hook
   const { saveState, handleUndo, handleRedo } = useUndoRedo({
@@ -414,6 +986,7 @@ export default function CircuitCanvas({
     // Clear any selection or cursor
     setSelection(null)
     setCursorPosition(null)
+    lastCursorPositionRef.current = null
     setCursorPlaced(false)
   }, [dnaSequence, dnaLength, components, isOriginInsideComponent, saveState, onCircuitChange, setSelection, setCursorPosition, setCursorPlaced, bpToX])
 
@@ -451,7 +1024,7 @@ export default function CircuitCanvas({
       if (!canvasRef.current || !scrollContainerRef.current) return
       const rect = canvasRef.current.getBoundingClientRect()
       const scrollLeft = scrollContainerRef.current.scrollLeft
-      const x = e.clientX - rect.left + scrollLeft - lineX
+      const x = e.clientX - rect.left + scrollLeft - activeLineX
       
       const current = components.find((c) => c.id === draggingPlacedPart.id)
       if (!current || current.position === undefined) return
@@ -477,7 +1050,7 @@ export default function CircuitCanvas({
           return { ...c, position: newP }
         })
 
-      const { position: insertPosClosed } = snapToValidInsertionPosition(desiredClosed, closedLength, othersClosed)
+      const { position: insertPosClosed } = snapToValidInsertionPosition(desiredClosed, closedLength, othersClosed, { componentLength: len, isRepositioning: true })
 
       // Re-open: shift components at/after insertion by +len, then insert moving component at insertPosClosed.
       const shifted = shiftComponentPositionsAtOrAfter(othersClosed, insertPosClosed, len)
@@ -529,8 +1102,13 @@ export default function CircuitCanvas({
     // Stop any canvas drag
     setIsDragging(false)
     // Hide cursor immediately so it doesn't flash during box manipulation
+    if (cursorHideTimerRef.current !== null) {
+      window.clearTimeout(cursorHideTimerRef.current)
+      cursorHideTimerRef.current = null
+    }
     setCursorVisible(false)
     setCursorPosition(null)
+    lastCursorPositionRef.current = null
     setCursorBp(null)
     setCursorPlaced(false)
 
@@ -542,7 +1120,7 @@ export default function CircuitCanvas({
     if (canvasRef.current && scrollContainerRef.current) {
       const rect = canvasRef.current.getBoundingClientRect()
       const scrollLeft = scrollContainerRef.current.scrollLeft
-      const x = e.clientX - rect.left + scrollLeft - lineX
+      const x = e.clientX - rect.left + scrollLeft - activeLineX
       const compLeftX = bpToX(comp.position)
       draggingPlacedPartMouseOffsetPxRef.current = x - compLeftX
     } else {
@@ -596,11 +1174,26 @@ export default function CircuitCanvas({
   }, [canvasWidth, strandWidthPx])
   
   const minInnerHeight = useMemo(() => {
-    if (canvasHeight > 0) {
-      return canvasHeight
-    }
-    return contentHeight
-  }, [canvasHeight, contentHeight])
+    // Ensure all stacked cells fit vertically inside the single panel, plus room for the culture '+' button.
+    if (renderCells.length === 0) return Math.max(contentHeight, canvasHeight || 0)
+    const lastIdx = renderCells.length - 1
+    const lastLineY = cellLineYs[lastIdx] ?? baseLineY
+    const lastCell = renderCells[lastIdx]
+    const plasmidCount = lastCell?.circuits?.length ?? 1
+    const { frameBottom } = computeCellFrame(lastLineY, plasmidCount)
+
+    const culturePlusPad = 140
+    const needed = Math.round(frameBottom + culturePlusPad)
+    if (canvasHeight > 0) return Math.max(canvasHeight, needed)
+    return Math.max(contentHeight, needed)
+  }, [
+    canvasHeight,
+    contentHeight,
+    renderCells,
+    baseLineY,
+    cellLineYs,
+    computeCellFrame,
+  ])
 
   // Custom scrollbar hook
   const scrollbar = useCustomScrollbar({
@@ -620,18 +1213,61 @@ export default function CircuitCanvas({
       if (offset && canvasRef.current && scrollContainerRef.current) {
         const rect = canvasRef.current.getBoundingClientRect()
         const scrollLeft = scrollContainerRef.current.scrollLeft
-        const x = offset.x - rect.left + scrollLeft - lineX
+        const target = getHoverPlasmidTargetFromClientOffset(offset)
+        const targetLineX = target?.plasmidLineX ?? activeLineX
+        const targetTotalWidth = target?.plasmidTotalWidth ?? activeTotalWidthPx
+        const x = offset.x - rect.left + scrollLeft - targetLineX
+
+        // If user is hovering a specific plasmid inside a cell, target that plasmid for preview (and for drop).
+        if (target && cultureCells && cultureCells.length > 0) {
+          if (onActivateCell) onActivateCell(target.cellId)
+          if (onActivatePlasmid) onActivatePlasmid(target.cellId, target.plasmidIdx)
+        }
+
+        // Highlight only the hovered cell (not the whole canvas).
+        if (target) {
+          const cellLineY = cellLineYs[target.cellIdx] ?? baseLineY
+          const cell = renderCells[target.cellIdx]
+          const plasmidCount = cell?.circuits?.length ?? 1
+          const { frameLeft, frameTop, frameWidth, frameBottom } = computeCellFrame(cellLineY, plasmidCount)
+          setDragTargetCellFrame({
+            left: frameLeft,
+            top: frameTop,
+            width: frameWidth,
+            height: Math.max(0, frameBottom - frameTop),
+          })
+        } else {
+          setDragTargetCellFrame(null)
+        }
         
         // Check if mouse is over strand area (includes displaced width from inserted parts)
-        if (x >= 0 && x <= strandWidthPx) {
-          const componentLength = COMPONENT_SIZES[item.type] || 100
+        // Allow some negative margin so components can be placed at position 0 even if mouse is slightly left
+        const componentLength = COMPONENT_SIZES[item.type] || 100
+        const componentWidthPx = componentLength / bpPerPixel
+        const leftMargin = componentWidthPx / 2 + 20 // Allow mouse to be up to half component width + 20px left of DNA start
+        if (x >= -leftMargin && x <= targetTotalWidth + leftMargin) {
+
+          // Use the target plasmid's component list for snapping (so preview respects overlaps on that plasmid).
+          const targetComps =
+            target && cultureCells && cultureCells.length > 0
+              ? (cultureCells.find((c) => c.id === target.cellId)?.circuits?.[target.plasmidIdx]?.components ?? components)
+              : components
+          const expandedLenForTarget = getExpandedLengthForComponents(
+            Number(
+              (target && cultureCells && cultureCells.length > 0
+                ? cultureCells.find((c) => c.id === target.cellId)?.circuits?.[target.plasmidIdx]?.dnaLength
+                : undefined) ?? dnaLength
+            ),
+            targetComps
+          )
           
           // Expanded insertion boundary (integer bp index)
           const desiredPosition = Math.round(x * bpPerPixel)
           const { position, snapped, blockedBy } = snapToValidInsertionPosition(
             desiredPosition,
-            expandedLengthBase,
-            components
+            expandedLenForTarget,
+            targetComps,
+            { componentLength }
           )
           
           setDragPreviewPosition({
@@ -641,6 +1277,10 @@ export default function CircuitCanvas({
             componentName: item.name,
             blockedPartIds: blockedBy,
             snappedFromBlocked: snapped,
+            targetLineY: target?.plasmidLineY,
+            targetCellId: target?.cellId,
+            targetPlasmidIndex: target?.plasmidIdx,
+            targetLineX: targetLineX,
           })
         } else {
           // Outside DNA area
@@ -668,9 +1308,11 @@ export default function CircuitCanvas({
         }
         const rect = canvasRef.current.getBoundingClientRect()
         const scrollLeft = scrollContainerRef.current.scrollLeft
-        const x = offset.x - rect.left + scrollLeft - lineX
-        const desiredPosition = Math.round(x * bpPerPixel)
-        position = snapToValidInsertionPosition(desiredPosition, expandedLengthBase, components).position
+        const x = offset.x - rect.left + scrollLeft - activeLineX
+        // Clamp x to valid range before calculating position (allows drops near edges)
+        const clampedX = Math.max(0, Math.min(totalWidth, x))
+        const desiredPosition = Math.round(clampedX * bpPerPixel)
+        position = snapToValidInsertionPosition(desiredPosition, expandedLayout.expandedLength, components, { componentLength }).position
       }
       
       const y = showAbstractView ? 190 : 200
@@ -691,16 +1333,64 @@ export default function CircuitCanvas({
       
       // Insert semantics in expanded space: shift downstream components and add new component at boundary
       saveState()
-      const shifted = shiftComponentPositionsAtOrAfter(components, position, componentLength)
-      const updatedComponents = [...shifted, newComponent]
-      setComponents(updatedComponents)
-      onCircuitChange(updatedComponents)
+      const targetCellId = dragPreviewPosition?.targetCellId
+      const targetPlasmidIndex = dragPreviewPosition?.targetPlasmidIndex
+      const isCultureTarget =
+        !!targetCellId &&
+        typeof targetPlasmidIndex === 'number' &&
+        cultureCells &&
+        cultureCells.length > 0 &&
+        typeof onCircuitChangeForPlasmid === 'function'
+
+      if (isCultureTarget) {
+        const cell = cultureCells.find((c) => c.id === targetCellId)
+        const baseComps = cell?.circuits?.[targetPlasmidIndex]?.components ?? []
+        const shifted = shiftComponentPositionsAtOrAfter(baseComps, position, componentLength)
+        const updatedComponents = [...shifted, newComponent]
+        onCircuitChangeForPlasmid!(targetCellId!, targetPlasmidIndex!, updatedComponents)
+        // If we're currently editing this plasmid, keep local state in sync too.
+        if (targetCellId === (activeCellId ?? '__single__') && targetPlasmidIndex === (renderCells[activeIdx]?.activeCircuitIndex ?? 0)) {
+          setComponents(updatedComponents)
+        }
+      } else {
+        const shifted = shiftComponentPositionsAtOrAfter(components, position, componentLength)
+        const updatedComponents = [...shifted, newComponent]
+        setComponents(updatedComponents)
+        onCircuitChange(updatedComponents)
+      }
       setDragPreviewPosition(null)
+      setDragTargetCellFrame(null)
     },
     collect: (monitor) => ({
       isOver: monitor.isOver(),
     }),
-  }), [bpToX, bpPerPixel, showAbstractView, lineX, dragPreviewPosition, showBasePairs, strandWidthPx, totalWidth, components, onCircuitChange, saveState, expandedLengthBase])
+  }), [
+    bpToX,
+    bpPerPixel,
+    showAbstractView,
+    lineX,
+    dragPreviewPosition,
+    showBasePairs,
+    strandWidthPx,
+    totalWidth,
+    components,
+    onCircuitChange,
+    onCircuitChangeForPlasmid,
+    saveState,
+    expandedLengthBase,
+    cultureCells,
+    activeCellId,
+    renderCells,
+    activeIdx,
+    onActivateCell,
+    onActivatePlasmid,
+    getHoverPlasmidTargetFromClientOffset,
+    getExpandedLengthForComponents,
+    renderCells,
+    cellLineYs,
+    baseLineY,
+    computeCellFrame,
+  ])
 
   const handleNodeMove = useCallback((id: string, x: number, y: number) => {
     setComponents((prev) => {
@@ -734,6 +1424,7 @@ export default function CircuitCanvas({
 
   // Keyboard shortcuts
   useEffect(() => {
+    if (!isActive) return
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
         return
@@ -784,33 +1475,47 @@ export default function CircuitCanvas({
     
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [selection, clipboard, selectedId, handleCopySelection, handleCutSelection, handlePaste, handleDeleteSelection, handleNodeDelete, handleUndo, handleRedo, setSelection])
+  }, [isActive, selection, clipboard, selectedId, handleCopySelection, handleCutSelection, handlePaste, handleDeleteSelection, handleNodeDelete, handleUndo, handleRedo, setSelection])
 
   // Handlers for DNASequenceRenderer
   const handleCursorMove = useCallback((e: React.MouseEvent) => {
     // Don't activate cursor while manipulating a placed part box
     if (draggingPlacedPart) return
+    // Don't update cursor if user is actively dragging a selection
+    if (selectionDragRef.current.isDragging) return
     if ((e.target as HTMLElement).closest?.('.dna-part-box') || (e.target as HTMLElement).closest?.('.dna-part-delete')) {
       return
     }
-    if (!cursorPlaced && !selectionDragRef.current.isDragging) {
-      const cursorPos = getCursorPositionFromMouse(e)
-      if (cursorPos !== null) {
-        setCursorPosition(cursorPos)
-        setCursorVisible(true)
-      }
+    // Always show cursor on mouse move in DNA view (removed cursorPlaced check for better responsiveness)
+    if (cursorHideTimerRef.current !== null) {
+      window.clearTimeout(cursorHideTimerRef.current)
+      cursorHideTimerRef.current = null
     }
-  }, [draggingPlacedPart, cursorPlaced, getCursorPositionFromMouse, setCursorPosition, setCursorVisible])
+    const cursorPos = getCursorPositionFromMouseActive(e)
+    if (cursorPos !== null) {
+      if (lastCursorPositionRef.current !== cursorPos) {
+        lastCursorPositionRef.current = cursorPos
+        setCursorPosition(cursorPos)
+      }
+      setCursorVisible(true)
+    }
+  }, [draggingPlacedPart, getCursorPositionFromMouseActive, setCursorPosition, setCursorVisible])
 
   const handleCursorLeave = useCallback(() => {
     // Only hide cursor if it's not placed and there's no active selection
     // Use a small delay to prevent flickering
     if (!cursorPlaced && !selectionDragRef.current.isDragging && !selection) {
+      if (cursorHideTimerRef.current !== null) {
+        window.clearTimeout(cursorHideTimerRef.current)
+        cursorHideTimerRef.current = null
+      }
       // Small timeout to prevent flicker when cursor briefly leaves/re-enters
-      setTimeout(() => {
+      cursorHideTimerRef.current = window.setTimeout(() => {
+        cursorHideTimerRef.current = null
         if (!cursorPlaced && !selectionDragRef.current.isDragging && !selection) {
           setCursorVisible(false)
           setCursorPosition(null)
+          lastCursorPositionRef.current = null
         }
       }, 50)
     }
@@ -819,14 +1524,23 @@ export default function CircuitCanvas({
   const handleBaseEnter = useCallback((index: number) => {
     // Don't activate cursor while manipulating a placed part box
     if (draggingPlacedPart) return
+    // Don't update cursor if user is actively dragging a selection
+    if (selectionDragRef.current.isDragging) return
+    
     setCursorBp(index)
-    if (!cursorPlaced) {
-      // Allow cursor in both DNA view and abstract view
-      const cursorPos = index + 1
-      setCursorPosition(cursorPos)
-      setCursorVisible(true)
+    // In DNA view, always show cursor on hover (more responsive feel)
+    // The cursorPlaced check is less relevant in DNA view where individual bases are hoverable
+    const cursorPos = index + 1
+    if (cursorHideTimerRef.current !== null) {
+      window.clearTimeout(cursorHideTimerRef.current)
+      cursorHideTimerRef.current = null
     }
-  }, [draggingPlacedPart, cursorPlaced, setCursorBp, setCursorPosition, setCursorVisible])
+    if (lastCursorPositionRef.current !== cursorPos) {
+      lastCursorPositionRef.current = cursorPos
+      setCursorPosition(cursorPos)
+    }
+    setCursorVisible(true)
+  }, [draggingPlacedPart, setCursorBp, setCursorPosition, setCursorVisible])
 
   const handleBaseLeave = useCallback(() => {
     setCursorBp(null)
@@ -836,6 +1550,7 @@ export default function CircuitCanvas({
     setSelectedId(comp.id)
     setSelection(null)
     setOverlappingComponentIds([])
+    setBackboneSelected(false)
   }, [setSelectedId, setSelection])
 
   const handleComponentMouseDown = useCallback((e: React.MouseEvent, comp: CircuitComponent) => {
@@ -878,23 +1593,62 @@ export default function CircuitCanvas({
     }
   }, [isOver, dragPreviewPosition])
 
+  // Clear cell-only drag highlight when drag leaves/ends.
+  useEffect(() => {
+    if (!isOver && dragTargetCellFrame) {
+      const t = setTimeout(() => setDragTargetCellFrame(null), 100)
+      return () => clearTimeout(t)
+    }
+  }, [isOver, dragTargetCellFrame])
+
   // Note: DNA/component "sync" validation no longer applies (components are overlays, DNA is not spliced).
 
   return (
     <div
       ref={canvasRef}
       className={`circuit-canvas ${isOver ? 'drag-over' : ''} ${isDragging ? 'dragging' : ''}`}
-      onWheel={handleWheel}
-      onMouseDown={handleMouseDown}
+      onMouseDown={(e) => {
+        onActivate?.()
+        handleMouseDown(e)
+      }}
       onContextMenu={(e) => {
-        // Enable context menu in both views
         e.preventDefault()
-        const bp = getBpFromMouse(e)
-        if (bp !== null && showBasePairs) {
-          setContextMenu({ x: e.clientX, y: e.clientY, bp })
+        
+        // Priority 1: If there's an active DNA selection, show DNA context menu
+        if (selection && (selection.startBp !== selection.endBp)) {
+          const bp = getBpFromMouseActive(e)
+          if (bp !== null) {
+            // Check if right-click is within the selection
+            const selStart = Math.min(selection.startBp, selection.endBp)
+            const selEnd = Math.max(selection.startBp, selection.endBp)
+            if (bp >= selStart && bp <= selEnd) {
+              setContextMenu({ x: e.clientX, y: e.clientY, bp })
+              return
+            }
+          }
+        }
+        
+        // Priority 2: If in DNA view, show DNA context menu
+        if (showBasePairs) {
+          const bp = getBpFromMouseActive(e)
+          if (bp !== null) {
+            setContextMenu({ x: e.clientX, y: e.clientY, bp })
+            return
+          }
+        }
+        
+        // Priority 3: Right-click on a cell - open the cell editor
+        const target = getHoverPlasmidTargetFromClientOffset({ x: e.clientX, y: e.clientY })
+        if (target) {
+          e.stopPropagation()
+          onActivateCell?.(target.cellId)
+          onActivatePlasmid?.(target.cellId, target.plasmidIdx)
+          onEditCell?.(target.cellId)
+          return
         }
       }}
       onClick={(e) => {
+        onActivate?.()
         // Don't clear selection if we just finished a drag selection
         // The selection should persist after dragging until user explicitly clicks off
         if (selectionDragRef.current.hasMoved && selectionDragRef.current.isDragging === false) {
@@ -906,7 +1660,11 @@ export default function CircuitCanvas({
         const target = e.target as HTMLElement
         const isClickingComponent = target.closest('.abstract-component-block') || target.closest('.circuit-node')
         const isClickingDNABase = target.hasAttribute('data-bp-index') || target.closest('[data-bp-index]')
-        const isClickingControl = target.closest('.canvas-controls') || target.closest('.selection-info')
+        const isClickingControl =
+          target.closest('.canvas-controls') ||
+          target.closest('.selection-info') ||
+          target.closest('.backbone-bar') ||
+          target.closest('.cell-add-circuit')
         const isClickingScrollbar = target.closest('.custom-scrollbar-horizontal')
         
         // Only clear selection when clicking on empty canvas (not on DNA, components, or controls)
@@ -915,9 +1673,15 @@ export default function CircuitCanvas({
           setSelection(null)
           setSelectedId(null)
           setOverlappingComponentIds([])
+          setBackboneSelected(false)
           setCursorPlaced(false)
+          if (cursorHideTimerRef.current !== null) {
+            window.clearTimeout(cursorHideTimerRef.current)
+            cursorHideTimerRef.current = null
+          }
           setCursorVisible(false)
           setCursorPosition(null)
+          lastCursorPositionRef.current = null
         }
       }}
     >
@@ -928,9 +1692,10 @@ export default function CircuitCanvas({
           width: '100%',
           height: '100%',
           overflowX: 'hidden',
-          overflowY: 'hidden',
+          // Allow vertical pan to see stacked cells, but don't show a second scrollbar.
+          overflowY: 'auto',
           position: 'relative',
-          cursor: showBasePairs && isDragging ? 'grabbing' : showBasePairs ? 'grab' : 'default',
+          cursor: isDragging ? 'grabbing' : 'default',
         }}
       >
         <div 
@@ -943,6 +1708,123 @@ export default function CircuitCanvas({
             position: 'relative',
           }}
         >
+          {/* While dragging a part, highlight only the cell currently under the cursor. */}
+          {dragTargetCellFrame && (
+            <div
+              style={{
+                position: 'absolute',
+                left: dragTargetCellFrame.left,
+                top: dragTargetCellFrame.top,
+                width: dragTargetCellFrame.width,
+                height: dragTargetCellFrame.height,
+                borderRadius: 16,
+                border: `2px solid ${hexToRgba(accentColor, 0.55)}`,
+                background: hexToRgba(accentColor, 0.08),
+                boxShadow: `0 0 10px ${hexToRgba(accentColor, 0.15)}`,
+                pointerEvents: 'none',
+                zIndex: 1,
+              }}
+            />
+          )}
+          {/* Render non-active cells (visual-only) stacked vertically in the same panel */}
+          {renderCells.map((cell, idx) => {
+            if (cell.id === (activeCellId ?? '__single__')) return null
+            const cellLineY = cellLineYs[idx] ?? baseLineY
+            const plasmids = cell.circuits?.length ? cell.circuits : []
+            const { frameLeft, frameTop, frameWidth, frameBottom } = computeCellFrame(cellLineY, plasmids.length || 1)
+
+            return (
+              <div key={`cell-preview-${cell.id}`} style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+                {/* cell frame + label */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: `${frameLeft}px`,
+                    top: `${frameTop}px`,
+                    width: `${frameWidth}px`,
+                    height: `${Math.max(1, frameBottom - frameTop)}px`,
+                    border: `2px dotted ${hexToRgba(accentColor, 0.7)}`,
+                    borderRadius: 14,
+                    background: 'transparent',
+                    zIndex: 0,
+                    pointerEvents: 'none',
+                    boxSizing: 'border-box',
+                  }}
+                />
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: `${frameLeft + 14}px`,
+                    top: `${frameTop}px`,
+                    transform: 'translateY(-50%)',
+                    padding: '4px 10px',
+                    fontFamily: 'Courier New, monospace',
+                    fontWeight: 700,
+                    fontSize: 12,
+                    color: hexToRgba(accentColor, 0.95),
+                    background: bgSecondary,
+                    zIndex: 1,
+                    pointerEvents: 'none',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {cell.cellType}: {cell.cellName}
+                </div>
+
+                {/* plasmids stacked */}
+                {plasmids.map((p, pi) => {
+                  const y = cellLineY + pi * plasmidSpacingPx
+                  const comps = p.components ?? []
+                  const bgLen = Number((p as any).dnaLength ?? DNA_LENGTH)
+                  const bgSeq = Array.isArray((p as any).dnaSequence) ? ((p as any).dnaSequence as string[]) : generateDNA(bgLen)
+                  const layout = buildExpandedLayout({ backgroundSequence: bgSeq, components: comps, extraInsertions: [] })
+                  const plasmidTotalWidthPx = layout.expandedLength / bpPerPixel
+                  const plasmidLineX = Math.round(laneLineX + Math.max(0, (laneTotalWidth - plasmidTotalWidthPx) / 2))
+                  return (
+                    <DNASequenceRenderer
+                      key={`cell-${cell.id}-plasmid-${p.id}`}
+                      dnaSequence={layout.expandedSequence}
+                      dnaLength={layout.expandedLength}
+                      components={comps}
+                      selection={null}
+                      cursorBp={null}
+                      cursorPlaced={false}
+                      selectedId={null}
+                      draggingComponentId={null}
+                      showBasePairs={showBasePairs}
+                      showAbstractView={showAbstractView}
+                      transitionFactor={transitionFactor}
+                      zoom={zoom}
+                      fontSize={fontSize}
+                      bpPerPixel={bpPerPixel}
+                      totalWidth={plasmidTotalWidthPx}
+                      lineX={plasmidLineX}
+                      lineY={y}
+                      bpToX={bpToX}
+                      hasDraggedRef={hasDraggedRef}
+                      dragComponentStartRef={dragComponentStartRef}
+                      selectionDragRef={selectionDragRef}
+                      onBaseMouseDown={() => {}}
+                      onCursorMove={() => {}}
+                      onCursorLeave={() => {}}
+                      onBaseEnter={() => {}}
+                      onBaseLeave={() => {}}
+                      onComponentClick={() => {}}
+                      onComponentMouseDown={() => {}}
+                      onComponentDelete={() => {}}
+                      highlightedPartIds={[]}
+                      backbone={p.backbone}
+                      backboneSelected={false}
+                      onSelectBackbone={() => {}}
+                      onEditBackbone={undefined}
+                      suppressCellFrame={true}
+                    />
+                  )
+                })}
+              </div>
+            )
+          })}
+
           <DNASequenceRenderer
             dnaSequence={expandedLayout.expandedSequence}
             dnaLength={expandedLayout.expandedLength}
@@ -958,9 +1840,9 @@ export default function CircuitCanvas({
             zoom={zoom}
             fontSize={fontSize}
             bpPerPixel={bpPerPixel}
-            totalWidth={totalWidth}
-            lineX={lineX}
-            lineY={lineY}
+            totalWidth={activeTotalWidthPx}
+            lineX={activeLineX}
+            lineY={activeLineY}
             bpToX={bpToX}
             hasDraggedRef={hasDraggedRef}
             dragComponentStartRef={dragComponentStartRef}
@@ -973,7 +1855,7 @@ export default function CircuitCanvas({
             onComponentClick={handleComponentClick}
             onComponentMouseDown={handleComponentMouseDown}
             onComponentDelete={handleNodeDelete}
-            getCursorPositionFromMouse={getCursorPositionFromMouse}
+            getCursorPositionFromMouse={getCursorPositionFromMouseActive}
             setCursorPosition={setCursorPosition}
             setCursorVisible={setCursorVisible}
             dragGap={dragPreviewPosition ? { startBp: dragPreviewPosition.bp, length: dragPreviewPosition.componentLength } : null}
@@ -981,7 +1863,360 @@ export default function CircuitCanvas({
             onPartMouseDown={handlePartMouseDown}
             onPartDelete={handleDeletePlacedPart}
             onPartContextMenu={onPartContextMenu}
+            backbone={backbone}
+            onEditBackbone={onEditBackbone}
+            backboneSelected={backboneSelected}
+            onSelectBackbone={() => {
+              setBackboneSelected(true)
+              setSelectedId(null)
+              setSelection(null)
+              setOverlappingComponentIds([])
+            }}
+            suppressCellFrame={true}
           />
+
+          {/* Active cell frame + label */}
+          {(() => {
+            const activeCell = renderCells[activeIdx]
+            if (!activeCell) return null
+            const cellLineY = cellLineYs[activeIdx] ?? baseLineY
+            const plasmids = activeCell.circuits?.length ? activeCell.circuits : []
+            const { frameLeft, frameTop, frameWidth, frameBottom } = computeCellFrame(cellLineY, plasmids.length || 1)
+            const frameHeight = Math.max(1, frameBottom - frameTop)
+            return (
+              <>
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: `${frameLeft}px`,
+                    top: `${frameTop}px`,
+                    width: `${frameWidth}px`,
+                    height: `${frameHeight}px`,
+                    border: `2px dotted ${hexToRgba(accentColor, 0.7)}`,
+                    borderRadius: 14,
+                    background: 'transparent',
+                    zIndex: 1,
+                    pointerEvents: 'none',
+                    boxSizing: 'border-box',
+                  }}
+                />
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: `${frameLeft + 14}px`,
+                    top: `${frameTop}px`,
+                    transform: 'translateY(-50%)',
+                    padding: '4px 10px',
+                    fontFamily: 'Courier New, monospace',
+                    fontWeight: 700,
+                    fontSize: 12,
+                    color: hexToRgba(accentColor, 0.95),
+                    background: bgSecondary,
+                    zIndex: 2,
+                    pointerEvents: 'none',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {activeCell.cellType}: {activeCell.cellName}
+                </div>
+              </>
+            )
+          })()}
+
+          {/* Render the other plasmids in the ACTIVE cell, stacked under the active one */}
+          {(() => {
+            const activeCell = renderCells[activeIdx]
+            if (!activeCell) return null
+            return (activeCell.circuits ?? []).map((p, pi) => {
+              if (pi === activePlasmidIdx) return null
+              const y = (cellLineYs[activeIdx] ?? baseLineY) + pi * plasmidSpacingPx
+              const comps = p.components ?? []
+              const bgLen = Number((p as any).dnaLength ?? DNA_LENGTH)
+              const bgSeq = Array.isArray((p as any).dnaSequence) ? ((p as any).dnaSequence as string[]) : generateDNA(bgLen)
+              const layout = buildExpandedLayout({ backgroundSequence: bgSeq, components: comps, extraInsertions: [] })
+              const plasmidTotalWidthPx = layout.expandedLength / bpPerPixel
+              const plasmidLineX = Math.round(laneLineX + Math.max(0, (laneTotalWidth - plasmidTotalWidthPx) / 2))
+              
+              // Handler to switch to this plasmid on interaction
+              const handleActivateThisPlasmid = () => {
+                onActivatePlasmid?.(activeCell.id, pi)
+              }
+              
+              return (
+                <div key={`active-cell-plasmid-preview-${p.id}`} style={{ position: 'absolute', inset: 0, pointerEvents: 'auto' }}>
+                  <DNASequenceRenderer
+                    dnaSequence={layout.expandedSequence}
+                    dnaLength={layout.expandedLength}
+                    components={comps}
+                    selection={null}
+                    cursorBp={null}
+                    cursorPlaced={false}
+                    selectedId={null}
+                    draggingComponentId={null}
+                    showBasePairs={showBasePairs}
+                    showAbstractView={showAbstractView}
+                    transitionFactor={transitionFactor}
+                    zoom={zoom}
+                    fontSize={fontSize}
+                    bpPerPixel={bpPerPixel}
+                    totalWidth={plasmidTotalWidthPx}
+                    lineX={plasmidLineX}
+                    lineY={y}
+                    bpToX={bpToX}
+                    hasDraggedRef={hasDraggedRef}
+                    dragComponentStartRef={dragComponentStartRef}
+                    selectionDragRef={selectionDragRef}
+                    onBaseMouseDown={handleActivateThisPlasmid}
+                    onCursorMove={handleActivateThisPlasmid}
+                    onCursorLeave={() => {}}
+                    onBaseEnter={handleActivateThisPlasmid}
+                    onBaseLeave={() => {}}
+                    onComponentClick={handleActivateThisPlasmid}
+                    onComponentMouseDown={handleActivateThisPlasmid}
+                    onComponentDelete={() => {}}
+                    highlightedPartIds={[]}
+                    backbone={p.backbone}
+                    backboneSelected={false}
+                    onSelectBackbone={handleActivateThisPlasmid}
+                    onEditBackbone={undefined}
+                    suppressCellFrame={true}
+                  />
+                </div>
+              )
+            })
+          })()}
+
+          {/* Add-plasmid button inside each cell, below its last plasmid */}
+          {(onAddCircuitInCellForCell || onAddCircuitInCell) && renderCells.length > 0 && (
+            <>
+              {renderCells.map((cell, idx) => {
+                const cellLineY = cellLineYs[idx] ?? baseLineY
+                const plasmids = cell.circuits?.length ? cell.circuits : []
+                const { frameLeft, frameWidth, frameBottom } = computeCellFrame(cellLineY, plasmids.length || 1)
+                const size = 30
+                const isActiveCell = cell.id === (activeCellId ?? '__single__')
+                return (
+                  <button
+                    key={`cell-add-plasmid-${cell.id}`}
+                    className="cell-add-circuit"
+                    onMouseDown={(e) => {
+                      e.stopPropagation()
+                      onActivateCell?.(cell.id)
+                      // Keep active plasmid index stable when adding (defaults to last active).
+                      onActivatePlasmid?.(cell.id, cell.activeCircuitIndex ?? 0)
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (onAddCircuitInCellForCell) {
+                        onAddCircuitInCellForCell(cell.id)
+                      } else {
+                        // Back-compat: open using current active cell
+                        onActivateCell?.(cell.id)
+                        onAddCircuitInCell?.()
+                      }
+                    }}
+                    title="Add another plasmid to this cell"
+                    style={{
+                      position: 'absolute',
+                      left: frameLeft + frameWidth / 2 - size / 2,
+                      top: frameBottom - size - 10,
+                      width: size,
+                      height: size,
+                      borderRadius: 999,
+                      border: `2px solid ${hexToRgba(accentColor, 0.85)}`,
+                      background: bgSecondary,
+                      color: hexToRgba(accentColor, 0.95),
+                      fontFamily: 'Courier New, monospace',
+                      fontWeight: 900,
+                      fontSize: 22,
+                      lineHeight: 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      zIndex: isActiveCell ? 8 : 7,
+                      opacity: isActiveCell ? 1 : 0.9,
+                    }}
+                  >
+                    +
+                  </button>
+                )
+              })}
+            </>
+          )}
+
+          {/* Add-cell button (culture) pinned above the horizontal scrollbar */}
+          {onAddCell && (
+            <button
+              className="culture-add-cell"
+              onMouseDown={(e) => {
+                e.stopPropagation()
+                onActivateCell?.(activeCellId ?? '__single__')
+              }}
+              onClick={(e) => {
+                e.stopPropagation()
+                onAddCell()
+              }}
+              title="Add a new cell to the culture"
+              style={{
+                position: 'absolute',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                bottom: 64,
+                width: 44,
+                height: 44,
+                borderRadius: 999,
+                border: `2px solid ${hexToRgba(accentColor, 0.85)}`,
+                background: bgSecondary,
+                color: hexToRgba(accentColor, 0.95),
+                fontFamily: 'Courier New, monospace',
+                fontWeight: 900,
+                fontSize: 30,
+                lineHeight: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                zIndex: 50,
+              }}
+            >
+              +
+            </button>
+          )}
+
+          {/* Delete button on each cell frame (top-right) */}
+          {onDeleteCell && (
+            <>
+              {renderCells.map((cell, idx) => {
+                const cellLineY = cellLineYs[idx] ?? baseLineY
+                const plasmidCount = cell.circuits?.length ?? 1
+                const { frameLeft, frameTop, frameWidth } = computeCellFrame(cellLineY, plasmidCount)
+                const size = 18
+                const left = frameLeft + frameWidth - size / 2
+                const top = frameTop - size / 2
+
+                return (
+                  <button
+                    key={`cell-delete-${cell.id}`}
+                    className="cell-delete"
+                    title="Delete cell"
+                    onMouseDown={(e) => {
+                      e.stopPropagation()
+                      onActivateCell?.(cell.id)
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      if (renderCells.length <= 1) {
+                        window.alert('You must keep at least one cell in the culture.')
+                        return
+                      }
+                      const yes = window.confirm('Delete this cell from the culture?')
+                      if (!yes) return
+                      onDeleteCell(cell.id)
+                    }}
+                    style={{
+                      position: 'absolute',
+                      left,
+                      top,
+                      width: size,
+                      height: size,
+                      borderRadius: 4,
+                      border: `1px solid ${hexToRgba(accentColor, 0.8)}`,
+                      background: bgSecondary,
+                      color: hexToRgba(accentColor, 0.95),
+                      fontFamily: 'Courier New, monospace',
+                      fontWeight: 900,
+                      fontSize: 14,
+                      lineHeight: 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      zIndex: 60,
+                    }}
+                  >
+                    ×
+                  </button>
+                )
+              })}
+            </>
+          )}
+
+          {/* Delete button for each plasmid (top-right of the right connector) */}
+          {onDeletePlasmid && renderCells.length > 0 && (
+            <>
+              {renderCells.flatMap((cell, cellIdx) => {
+                const cellLineY = cellLineYs[cellIdx] ?? baseLineY
+                const plasmids = cell.circuits ?? []
+                if (plasmids.length <= 1) return []
+
+                const size = 16
+                const dx = 2 // slight outward offset
+                const dy = -2
+
+                return plasmids.map((p, pIdx) => {
+                  const y = Math.round(cellLineY + pIdx * plasmidSpacingPx)
+                  const comps = p.components ?? []
+                  const expandedLen = getExpandedLengthForComponents(Number((p as any).dnaLength ?? DNA_LENGTH), comps)
+                  const plasmidTotalWidthPx = expandedLen / bpPerPixel
+                  const plasmidLineX = Math.round(laneLineX + Math.max(0, (laneTotalWidth - plasmidTotalWidthPx) / 2))
+
+                  // Geometry copied from DNASequenceRenderer for right connector position, but plasmid-specific.
+                  const backbonePad = Math.round(Math.max(35, Math.min(80, 55 * zoom)))
+                  const backboneLeft = Math.round(plasmidLineX - backbonePad)
+                  const backboneWidth = Math.round(plasmidTotalWidthPx + backbonePad * 2)
+                  const backboneStubLen = Math.round(Math.max(14, Math.min(28, 18 * zoom)))
+                  const connectorXRight = Math.round(backboneLeft + backboneWidth + backboneStubLen)
+
+                  const left = connectorXRight - size / 2 + dx
+                  const top = y - size / 2 + dy
+                  const isActiveCell = cell.id === activeCellId
+                  const isActivePlasmid = isActiveCell && pIdx === (cell.activeCircuitIndex ?? 0)
+
+                  return (
+                    <button
+                      key={`plasmid-delete-${cell.id}-${p.id}`}
+                      className="plasmid-delete"
+                      title="Delete plasmid"
+                      onMouseDown={(e) => {
+                        e.stopPropagation()
+                        onActivateCell?.(cell.id)
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        const yes = window.confirm('Delete this plasmid from the cell?')
+                        if (!yes) return
+                        onDeletePlasmid(cell.id, p.id)
+                      }}
+                      style={{
+                        position: 'absolute',
+                        left,
+                        top,
+                        width: size,
+                        height: size,
+                        borderRadius: 4,
+                        border: `1px solid ${hexToRgba(accentColor, 0.8)}`,
+                        background: bgSecondary,
+                        color: hexToRgba(accentColor, 0.95),
+                        fontFamily: 'Courier New, monospace',
+                        fontWeight: 900,
+                        fontSize: 12,
+                        lineHeight: 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        zIndex: isActivePlasmid ? 80 : 40,
+                        opacity: isActiveCell ? 1 : 0.85,
+                      }}
+                    >
+                      ×
+                    </button>
+                  )
+                })
+              })}
+            </>
+          )}
           <DNACursor
             cursorVisible={cursorVisible}
             cursorPosition={cursorPosition}
@@ -989,8 +2224,8 @@ export default function CircuitCanvas({
             cursorPlaced={cursorPlaced}
             zoom={zoom}
             bpToX={bpToX}
-            lineX={lineX}
-            lineY={lineY}
+            lineX={cursorRenderLineX}
+            lineY={cursorRenderLineY}
           />
           <DNASelectionHighlight
             selection={selection}
@@ -998,23 +2233,72 @@ export default function CircuitCanvas({
             dnaLength={expandedLayout.expandedLength}
             zoom={zoom}
             bpToX={bpToX}
-            lineX={lineX}
-            lineY={lineY}
+            lineX={cursorRenderLineX}
+            lineY={cursorRenderLineY}
           />
-          {/* Operon highlights */}
-          {showOperonHighlights && (
-            <OperonHighlight
-              operons={circuitAnalysis.operons}
-              selectedOperonId={selectedOperonId}
-              bpToX={bpToX}
-              lineY={lineY}
-              lineX={lineX}
-              zoom={zoom}
-              strandSpacing={strandSpacing}
-              baseHeight={baseHeight}
-              onOperonClick={onOperonClick}
-            />
-          )}
+          {/* Operon highlights for ALL plasmids in ALL cells */}
+          {showOperonHighlights && (() => {
+            if (renderCells.length === 0) {
+              // Single plasmid mode (no culture)
+              return (
+                <OperonHighlight
+                  operons={circuitAnalysis.operons}
+                  selectedOperonId={selectedOperonId}
+                  bpToX={bpToX}
+                  lineY={activeLineY}
+                  lineX={activeLineX}
+                  zoom={zoom}
+                  strandSpacing={strandSpacing}
+                  baseHeight={baseHeight}
+                  onOperonClick={onOperonClick}
+                />
+              )
+            }
+            // Multi-cell mode: render operons for each plasmid in ALL cells
+            return renderCells.flatMap((cell, cellIdx) => {
+              const cellLineY = cellLineYs[cellIdx] ?? baseLineY
+              const isActiveCell = cell.id === (activeCellId ?? '__single__')
+              
+              return (cell.circuits || []).map((p, pi) => {
+                const y = cellLineY + pi * plasmidSpacingPx
+                const isActivePlasmid = isActiveCell && pi === activePlasmidIdx
+                
+                // For the active plasmid, use local state (components, expandedLayout) to stay in sync with DNA rendering
+                // For other plasmids, use cultureCells data
+                const comps = isActivePlasmid ? components : (p.components ?? [])
+                const bgLen = isActivePlasmid ? dnaLength : Number((p as any).dnaLength ?? DNA_LENGTH)
+                const bgSeq = isActivePlasmid ? dnaSequence : (Array.isArray((p as any).dnaSequence) ? ((p as any).dnaSequence as string[]) : generateDNA(bgLen))
+                const layout = isActivePlasmid ? expandedLayout : buildExpandedLayout({ backgroundSequence: bgSeq, components: comps, extraInsertions: [] })
+                const plasmidTotalWidthPx = layout.expandedLength / bpPerPixel
+                const plasmidLineX = isActivePlasmid ? activeLineX : Math.round(laneLineX + Math.max(0, (laneTotalWidth - plasmidTotalWidthPx) / 2))
+                
+                // Get operons for this specific plasmid
+                const plasmidModel = new CircuitModel(comps, layout.expandedLength)
+                const validation = plasmidModel.validateCircuit()
+                const plasmidOperons = validation.operons
+                
+                // Create a bpToX function for this plasmid
+                const plasmidBpToX = (bp: number) => bp / bpPerPixel
+                
+                return (
+                  <OperonHighlight
+                    key={`operon-highlight-${cell.id}-${p.id}`}
+                    operons={plasmidOperons}
+                    selectedOperonId={selectedOperonId}
+                    bpToX={plasmidBpToX}
+                    lineY={y}
+                    lineX={plasmidLineX}
+                    zoom={zoom}
+                    strandSpacing={strandSpacing}
+                    baseHeight={baseHeight}
+                    onOperonClick={onOperonClick}
+                    cellId={cell.id}
+                    plasmidId={p.id}
+                  />
+                )
+              })
+            })
+          })()}
           {/* Drag preview overlay (uses the same insertion-boundary mapping) */}
           <DragPreviewOverlay
             dragPreviewPosition={dragPreviewPosition}
@@ -1022,13 +2306,15 @@ export default function CircuitCanvas({
             zoom={zoom}
             bpToX={bpToX}
             bpPerPixel={bpPerPixel}
-            lineX={lineX}
-            lineY={lineY}
+            lineX={dragPreviewPosition?.targetLineX ?? activeLineX}
+            lineY={dragPreviewPosition?.targetLineY ?? activeLineY}
             baseHeight={baseHeight}
             strandSpacing={strandSpacing}
             fontSize={fontSize}
           />
-          {showAbstractView && scrollContainerRef.current && components
+          {/* Free-floating nodes (components without insertion position) are legacy; hide them in culture mode
+              to avoid confusing "floating parts" when the lane resizes. */}
+          {showAbstractView && scrollContainerRef.current && (!cultureCells || cultureCells.length === 0) && components
             .filter((comp) => comp.position === undefined) // Only render CircuitNode for components NOT placed on the strand
             .map((comp) => {
             const scrollLeft = scrollContainerRef.current?.scrollLeft || 0

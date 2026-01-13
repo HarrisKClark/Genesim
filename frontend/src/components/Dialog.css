@@ -1,0 +1,352 @@
+/* Unified dialog styles - all dialogs should use these classes */
+
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.dialog-container {
+  background: var(--bg-dialog);
+  border: 2px solid var(--border-primary);
+  border-radius: 0;
+  box-shadow: 4px 4px 0 var(--shadow-color);
+  display: flex;
+  flex-direction: column;
+  font-family: 'Courier New', monospace;
+  max-width: 90vw;
+  max-height: 85vh;
+  overflow: hidden;
+}
+
+.dialog-container.small {
+  min-width: 350px;
+  width: 400px;
+}
+
+.dialog-container.medium {
+  min-width: 450px;
+  width: 550px;
+}
+
+.dialog-container.large {
+  min-width: 600px;
+  width: 760px;
+}
+
+.dialog-header {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-light);
+  background: var(--bg-dialog-header);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dialog-title {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--text-primary);
+  font-family: 'Courier New', monospace;
+}
+
+.dialog-close-btn {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  padding: 6px;
+  color: var(--text-primary);
+}
+
+.dialog-close-btn:hover {
+  color: var(--accent-primary);
+}
+
+.dialog-body {
+  padding: 16px;
+  overflow-y: auto;
+  flex: 1;
+  color: var(--text-primary);
+  background: var(--bg-dialog);
+}
+
+.dialog-footer {
+  padding: 12px 16px;
+  border-top: 1px solid var(--border-light);
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  background: var(--bg-dialog-header);
+}
+
+/* Form elements */
+.dialog-label {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.dialog-input,
+input[type="text"],
+input[type="number"],
+input[type="email"],
+input[type="password"],
+input[type="search"],
+textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border-input);
+  border-radius: 0;
+  font-size: 13px;
+  font-family: 'Courier New', monospace;
+  background: var(--bg-input);
+  color: var(--text-primary);
+}
+
+.dialog-input:focus,
+input[type="text"]:focus,
+input[type="number"]:focus,
+input[type="email"]:focus,
+input[type="password"]:focus,
+input[type="search"]:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.dialog-select,
+select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border-input);
+  border-radius: 0;
+  font-size: 13px;
+  font-family: 'Courier New', monospace;
+  background: var(--bg-input);
+  color: var(--text-primary);
+}
+
+.dialog-select:focus,
+select:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+/* Ensure checkboxes and radios use accent color */
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--accent-primary);
+}
+
+/* Buttons */
+.dialog-btn {
+  padding: 8px 16px;
+  border-radius: 0;
+  cursor: pointer;
+  font-family: 'Courier New', monospace;
+  font-weight: 600;
+  font-size: 12px;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.dialog-btn-primary {
+  background: var(--accent-primary);
+  color: var(--text-on-accent);
+  border: 1px solid var(--accent-hover);
+}
+
+.dialog-btn-primary:hover {
+  background: var(--accent-hover);
+}
+
+.dialog-btn-secondary {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-primary);
+}
+
+.dialog-btn-secondary:hover {
+  background: var(--bg-hover);
+}
+
+.dialog-btn-danger {
+  background: #e74c3c;
+  color: #fff;
+  border: 1px solid #c0392b;
+}
+
+.dialog-btn-danger:hover {
+  background: #c0392b;
+}
+
+/* Tabs */
+.dialog-tabs {
+  padding: 12px;
+  border-bottom: 1px solid var(--border-light);
+  display: flex;
+  gap: 10px;
+  background: var(--bg-dialog);
+}
+
+.dialog-tab {
+  padding: 6px 10px;
+  border-radius: 0;
+  border: 1px solid var(--border-primary);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.dialog-tab.active {
+  background: var(--accent-primary);
+  color: var(--text-on-accent);
+  border-color: var(--accent-hover);
+}
+
+.dialog-tab:hover:not(.active) {
+  background: var(--bg-hover);
+}
+
+/* List items */
+.dialog-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.dialog-list-item {
+  padding: 10px 12px;
+  border: 1px solid var(--border-light);
+  background: var(--bg-input);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.dialog-list-item:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-primary);
+}
+
+.dialog-list-item.selected {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 1px var(--accent-primary);
+}
+
+/* Form groups */
+.dialog-form-group {
+  margin-bottom: 16px;
+}
+
+.dialog-form-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.dialog-form-row > * {
+  flex: 1;
+}
+
+/* Checkbox/Radio */
+.dialog-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.dialog-checkbox-row input[type="checkbox"],
+.dialog-checkbox-row input[type="radio"] {
+  accent-color: var(--accent-primary);
+}
+
+.dialog-checkbox-row label {
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+/* Error message */
+.dialog-error {
+  padding: 10px 12px;
+  background: #fee;
+  border: 1px solid #e74c3c;
+  color: #c0392b;
+  font-size: 12px;
+  margin-bottom: 12px;
+}
+
+/* Search input */
+.dialog-search {
+  padding: 8px 10px;
+  border: 1px solid var(--border-input);
+  border-radius: 0;
+  font-size: 13px;
+  font-family: 'Courier New', monospace;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  width: 100%;
+  margin-bottom: 12px;
+}
+
+.dialog-search::placeholder {
+  color: var(--text-hint);
+}
+
+/* Empty state */
+.dialog-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+/* Context menu specific */
+.context-menu {
+  position: fixed;
+  background: var(--bg-dialog);
+  border: 1px solid var(--border-primary);
+  border-radius: 0;
+  box-shadow: 2px 2px 8px var(--shadow-color);
+  z-index: 1000;
+  min-width: 160px;
+  padding: 4px 0;
+  font-family: 'Courier New', monospace;
+}
+
+.context-menu-item {
+  padding: 8px 16px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-primary);
+  background: transparent;
+  border: none;
+  width: 100%;
+  text-align: left;
+  font-family: 'Courier New', monospace;
+}
+
+.context-menu-item:hover {
+  background: var(--bg-hover);
+}
+
+.context-menu-separator {
+  height: 1px;
+  background: var(--border-light);
+  margin: 4px 0;
+}
+

@@ -1,3 +1,5 @@
+import { theme } from '../utils/themeUtils'
+
 interface ZoomControlsProps {
   zoom?: number // Not used in render but kept for potential future use
   onZoomIn: () => void
@@ -5,6 +7,10 @@ interface ZoomControlsProps {
 }
 
 export default function ZoomControls({ zoom: _zoom, onZoomIn, onZoomOut }: ZoomControlsProps) {
+  const accentColor = theme.accentPrimary
+  const accentHover = theme.accentHover
+  const textOnAccent = theme.textOnAccent
+
   return (
     <div style={{
       position: 'absolute',
@@ -23,9 +29,9 @@ export default function ZoomControls({ zoom: _zoom, onZoomIn, onZoomOut }: ZoomC
           padding: 0,
           fontSize: '18px',
           fontFamily: 'Courier New, monospace',
-          background: '#4a90e2',
-          color: '#fff',
-          border: '1px solid #2d5aa0',
+          background: accentColor,
+          color: textOnAccent,
+          border: `1px solid ${accentHover}`,
           cursor: 'pointer',
           display: 'flex',
           alignItems: 'center',
@@ -44,9 +50,9 @@ export default function ZoomControls({ zoom: _zoom, onZoomIn, onZoomOut }: ZoomC
           padding: 0,
           fontSize: '18px',
           fontFamily: 'Courier New, monospace',
-          background: '#4a90e2',
-          color: '#fff',
-          border: '1px solid #2d5aa0',
+          background: accentColor,
+          color: textOnAccent,
+          border: `1px solid ${accentHover}`,
           cursor: 'pointer',
           display: 'flex',
           alignItems: 'center',
@@ -60,4 +66,3 @@ export default function ZoomControls({ zoom: _zoom, onZoomIn, onZoomOut }: ZoomC
     </div>
   )
 }
-
