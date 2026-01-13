@@ -1,72 +1,72 @@
 # Genesim Backend
 
-FastAPI-based backend for genetic circuit simulation. Provides RESTful API endpoints for running deterministic and stochastic simulations of genetic circuits.
+This is the backend API for Genesim - it's where all the simulation magic happens! Built with FastAPI, it provides a RESTful API that handles all the heavy lifting when you want to simulate genetic circuits.
 
-## Features
+## What It Does
 
 ### Simulation Methods
 
 - **Deterministic Simulation**: 
-  - Runge-Kutta 4 (RK4) numerical integration
-  - Continuous ODE-based modeling
-  - Fast computation for large time ranges
+  - Uses Runge-Kutta 4 (RK4) for numerical integration
+  - Models everything as continuous ODEs
+  - Super fast, great for quick checks or long time ranges
 
 - **Stochastic Simulation**:
-  - Gillespie Stochastic Simulation Algorithm (SSA)
-  - Discrete event simulation
-  - Accounts for molecular noise and variability
+  - Implements the Gillespie Stochastic Simulation Algorithm (SSA)
+  - Models discrete molecular events
+  - Accounts for all that molecular noise and variability that makes biology interesting
 
 - **Flow Cytometry Simulation**:
-  - Batch stochastic runs
-  - Population-level analysis
-  - Histogram generation for cell-to-cell variation
+  - Runs a batch of stochastic simulations
+  - Perfect for seeing how a population of cells behaves
+  - Generates histograms showing cell-to-cell variation
 
-### Biological Models
+### The Biology
 
-- **Transcription**: mRNA production with promoter strength
-- **Translation**: Protein production with RBS strength
-- **Degradation**: First-order decay for mRNA and proteins
+- **Transcription**: mRNA gets made based on promoter strength
+- **Translation**: Proteins get made based on RBS strength
+- **Degradation**: Everything decays over time (first-order kinetics)
 - **Hill Function Regulation**: 
-  - Promoter repression by inhibitors
-  - Promoter activation by activators
-  - Configurable cooperativity (Hill coefficient)
-- **Polycistronic mRNA**: Support for multi-protein operons
+  - Promoters can be repressed by inhibitors
+  - Promoters can be activated by activators
+  - You can tweak the cooperativity (Hill coefficient) to match your system
+- **Polycistronic mRNA**: One mRNA can make multiple proteins - because operons are cool
 
-## Installation
+## Getting Started
 
-### Prerequisites
+### What You Need
 
-- **Python** 3.8 or higher
-- **pip** or **conda**
+- **Python** 3.8 or higher (we're not picky, but newer is better)
+- **pip** or **conda** (whatever you prefer)
 
 ### Setup
 
-1. **Create virtual environment** (recommended):
+1. **Create a virtual environment** (seriously, do this - it'll save you headaches):
    ```bash
    python -m venv .venv
    source .venv/bin/activate  # On Windows: .venv\Scripts\activate
    ```
 
-2. **Install dependencies**:
+2. **Install the dependencies**:
    ```bash
    pip install -r requirements.txt
    ```
 
 ### Running the Server
 
-**Development mode** (with auto-reload):
+**Development mode** (auto-reloads when you change code - super handy):
 ```bash
 uvicorn app.main:app --reload --port 8000
 ```
 
-**Production mode**:
+**Production mode** (when you're ready to deploy):
 ```bash
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
-The API will be available at:
+Once it's running, you can access:
 - API: http://localhost:8000
-- Interactive docs: http://localhost:8000/docs
+- Interactive docs: http://localhost:8000/docs (this is really cool - check it out!)
 - Alternative docs: http://localhost:8000/redoc
 
 ## API Endpoints
@@ -77,7 +77,7 @@ The API will be available at:
 GET /api/health
 ```
 
-Returns server status and version information.
+Just a quick check to see if the server is alive and kicking.
 
 **Response**:
 ```json
@@ -93,7 +93,7 @@ Returns server status and version information.
 POST /api/simulate/transcripts
 ```
 
-Simulates one or more genetic transcripts (operons) independently.
+This is the main endpoint - it simulates one or more genetic transcripts (operons). You can run them independently, which is pretty flexible.
 
 **Request Body**:
 ```json
@@ -125,22 +125,22 @@ Simulates one or more genetic transcripts (operons) independently.
 }
 ```
 
-**Parameters**:
-- `transcripts`: Array of transcript specifications
-  - `promoterStrength`: Transcription rate (mRNA/min)
-  - `rbsStrengths`: Translation rates for each cistron (protein/min per mRNA)
-  - `degradationRates`: Decay rates for mRNA and proteins (1/min)
-  - `inhibitorName`: Name of repressor protein (optional)
-  - `hillK`: Hill function K parameter (half-maximal concentration)
-  - `hillN`: Hill function n parameter (cooperativity)
-  - `leak`: Basal promoter activity (leakiness)
+**What all these parameters mean**:
+- `transcripts`: An array of transcript specs (you can simulate multiple at once!)
+  - `promoterStrength`: How fast mRNA gets made (mRNA/min)
+  - `rbsStrengths`: Translation rates for each protein in the operon (protein/min per mRNA)
+  - `degradationRates`: How fast things break down (1/min)
+  - `inhibitorName`: Name of the repressor protein (optional - leave null if you don't need it)
+  - `hillK`: Half-maximal concentration for the Hill function
+  - `hillN`: Cooperativity (how steep the response is)
+  - `leak`: Basal promoter activity (because nothing is perfect)
   - `activatorName`: Name of activator protein (optional)
   - `actK`, `actN`: Activation Hill parameters (optional)
 - `params`:
-  - `tEnd`: Simulation end time (minutes)
-  - `dt`: Time step for deterministic simulation
-  - `method`: `"deterministic"`, `"stochastic"`, or `"flow"`
-  - `seed`: Random seed for stochastic simulations (optional)
+  - `tEnd`: How long to run the simulation (minutes)
+  - `dt`: Time step for deterministic simulation (smaller = more accurate but slower)
+  - `method`: Choose `"deterministic"`, `"stochastic"`, or `"flow"`
+  - `seed`: Random seed for stochastic simulations (optional - useful for reproducibility)
   - `runs`: Number of runs for flow cytometry (required if `method` is `"flow"`)
 
 **Response** (Deterministic/Stochastic):
@@ -189,51 +189,54 @@ Simulates one or more genetic transcripts (operons) independently.
 backend/
 ├── app/
 │   ├── __init__.py
-│   ├── main.py          # FastAPI application and routes
-│   ├── models.py        # Pydantic request/response models
-│   └── simulate.py      # Simulation engine implementation
-├── requirements.txt     # Python dependencies
-└── README.md
+│   ├── main.py          # FastAPI app and all the routes
+│   ├── models.py        # Pydantic models for requests/responses
+│   ├── simulate.py      # The actual simulation engine
+│   ├── integrators.py   # Numerical integration methods
+│   ├── kinetics.py      # Biological kinetics models
+│   └── response_builder.py # Builds the response data
+├── requirements.txt     # All the Python packages you need
+└── README.md           # This file!
 ```
 
 ## Dependencies
 
-- **fastapi**: Web framework
-- **uvicorn**: ASGI server
-- **pydantic**: Data validation
-- **numpy**: Numerical computation
-- **scipy**: Scientific computing (optional, for advanced features)
+- **fastapi**: The web framework (it's really fast, hence the name)
+- **uvicorn**: The ASGI server that runs everything
+- **pydantic**: Makes sure your data is valid before we even look at it
+- **numpy**: Does all the number crunching
+- **scipy**: For the fancy scientific computing stuff
 
-## Simulation Details
+## How the Simulations Work
 
 ### ODE Model
 
-For each transcript:
+For each transcript, we model:
 
 **mRNA dynamics**:
 ```
 dm/dt = α_m · f_regulation([I], [A]) - δ_m · m
 ```
 
-**Protein dynamics** (per cistron):
+**Protein dynamics** (for each protein in the operon):
 ```
 dp_i/dt = α_p · rbsStrength_i · m - δ_p · p_i
 ```
 
 Where:
-- `α_m`: Promoter strength (transcription rate)
+- `α_m`: Promoter strength (how fast mRNA gets made)
 - `α_p`: Translation rate (scaled by RBS strength)
-- `δ_m`, `δ_p`: Degradation rates
-- `f_regulation`: Hill function for regulation
+- `δ_m`, `δ_p`: Degradation rates (how fast things break down)
+- `f_regulation`: Hill function that handles repression/activation
 
 ### Hill Function
 
-**Repression**:
+**Repression** (when something turns the promoter off):
 ```
 f_repression([I]) = leak + (1 - leak) / (1 + ([I]/K)^n)
 ```
 
-**Activation**:
+**Activation** (when something turns the promoter on):
 ```
 f_activation([A]) = leak + (1 - leak) · ([A]^n) / (K^n + [A]^n)
 ```
@@ -245,19 +248,19 @@ The stochastic simulation uses the Gillespie SSA to model discrete molecular eve
 - Translation events (protein production)
 - Degradation events (mRNA/protein decay)
 
+It's basically a fancy way of saying "we model each molecule individually and account for randomness."
+
 ## Error Handling
 
-The API returns appropriate HTTP status codes:
-- `200`: Success
-- `400`: Bad request (invalid parameters)
-- `422`: Validation error (Pydantic)
-- `500`: Internal server error
+We try to be helpful when things go wrong. The API returns appropriate HTTP status codes:
+- `200`: Everything worked perfectly
+- `400`: Bad request (you sent us something weird)
+- `422`: Validation error (Pydantic caught something wrong with your data)
+- `500`: Something broke on our end (sorry!)
 
-Error responses include detailed error messages:
+Error responses include a message explaining what went wrong:
 ```json
 {
   "detail": "Error message describing what went wrong"
 }
 ```
-
-

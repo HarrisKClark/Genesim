@@ -1,44 +1,43 @@
 # Genesim Frontend
 
-React + TypeScript frontend for the Genesim genetic circuit simulation platform. Provides an intuitive visual interface for designing genetic circuits and viewing simulation results.
+This is the frontend for Genesim - the part you actually see and interact with! It's built with React and TypeScript, and it gives you a pretty intuitive visual interface for designing genetic circuits and checking out your simulation results.
 
-## Features
+## What's Cool About It
 
 ### Circuit Design
-- **Dual View Modes**: 
-  - Abstract view: Visual representation of biological parts
-  - DNA view: Detailed base-pair level sequence visualization
+- **Two Ways to View**: 
+  - Abstract view: See your biological parts as nice visual blocks
+  - DNA view: Zoom in and see every single base pair (it's pretty detailed)
 - **Interactive Canvas**: 
-  - Drag-and-drop component placement
-  - Click and drag selection for DNA editing
-  - Real-time cursor positioning
-  - Zoom and pan controls
+  - Drag and drop components right onto the DNA strand
+  - Click and drag to select DNA regions for editing
+  - Real-time cursor positioning so you always know where you are
+  - Zoom and pan controls to navigate around
 - **Component Library**:
-  - **Promoters**: pR, pLac, pTet, and custom promoters
-  - **Genes**: Organized by function (Reporters, Activators, Repressors)
+  - **Promoters**: We've got pR, pLac, pTet, and you can make custom ones too
+  - **Genes**: Organized by what they do (Reporters, Activators, Repressors)
   - **RBS**: Ribosome Binding Sites
-  - **Terminators**: Transcription termination signals
-- **Custom Parts**: Create custom promoters with configurable parameters
-- **Operon Detection**: Automatic validation and highlighting of genetic operons
+  - **Terminators**: The stop signs of transcription
+- **Custom Parts**: Want something specific? Create custom promoters and tweak all the parameters
+- **Operon Detection**: We automatically check if your circuit makes sense and highlight any operons we find
 
 ### Simulation Interface
 - **Multiple Simulation Types**:
-  - Deterministic (RK4 solver)
-  - Stochastic (Gillespie SSA)
-  - Flow Cytometry (batch stochastic runs)
+  - Deterministic (RK4 solver) - fast and smooth
+  - Stochastic (Gillespie SSA) - accounts for randomness
+  - Flow Cytometry (batch stochastic runs) - see population-level behavior
 - **Results Visualization**: 
-  - Interactive Plotly time-series charts
-  - mRNA and protein concentration plots
-  - Summary tables with final values
-  - Histogram visualization for flow cytometry
+  - Interactive Plotly charts that you can zoom and pan
+  - Time-series plots for mRNA and protein concentrations
+  - Summary tables showing final values
+  - Histogram visualization for flow cytometry results
 
 ### DNA Editing
-- **Selection**: Click and drag to select DNA regions
-- **Copy/Paste**: Standard keyboard shortcuts (Ctrl+C/Ctrl+V)
-- **Delete**: Remove selected DNA and overlapping components
-- **Reverse Complement**: Transform DNA sequences
-- **Undo/Redo**: Full undo/redo support
-
+- **Selection**: Click and drag on the DNA strand to select regions
+- **Copy/Paste**: Standard keyboard shortcuts work (Ctrl+C/Ctrl+V, or Cmd on Mac)
+- **Delete**: Remove selected DNA and any components that overlap
+- **Reverse Complement**: Flip your DNA sequences around
+- **Undo/Redo**: Made a mistake? No problem, just undo it
 
 ## Project Structure
 
@@ -46,28 +45,28 @@ React + TypeScript frontend for the Genesim genetic circuit simulation platform.
 frontend/
 ├── src/
 │   ├── components/
-│   │   ├── Analysis/           # Operon analysis components
-│   │   ├── Canvas/             # Canvas-related components
+│   │   ├── Analysis/           # Components for analyzing operons
+│   │   ├── Canvas/             # Canvas-related UI components
 │   │   ├── DNA/                # DNA visualization components
-│   │   ├── CircuitCanvas.tsx   # Main design canvas
-│   │   ├── ComponentLibrary.tsx # Component library sidebar
-│   │   ├── ResultsPanel.tsx    # Simulation results display
-│   │   └── ...
+│   │   ├── CircuitCanvas.tsx   # The main design canvas
+│   │   ├── ComponentLibrary.tsx # The sidebar with all the parts
+│   │   ├── ResultsPanel.tsx    # Where simulation results show up
+│   │   └── ...                 # Lots more components
 │   ├── hooks/                  # Custom React hooks
 │   │   ├── useCircuitAnalysis.ts
 │   │   ├── useDNAEditing.ts
 │   │   ├── useDNASelection.ts
-│   │   └── ...
+│   │   └── ...                 # More hooks for various features
 │   ├── models/                 # Data models
 │   │   └── CircuitModel.ts
 │   ├── utils/                  # Utility functions
-│   │   ├── expandedLayout.ts   # DNA layout calculations
-│   │   ├── operonDetection.ts  # Operon detection FSM
-│   │   ├── partLibrary.ts      # Component definitions
-│   │   └── ...
+│   │   ├── expandedLayout.ts   # Calculates how to lay out DNA
+│   │   ├── operonDetection.ts  # Detects operons using a state machine
+│   │   ├── partLibrary.ts      # Defines all the components
+│   │   └── ...                 # More utilities
 │   ├── types/                  # TypeScript type definitions
 │   ├── constants/              # Constants and configuration
-│   ├── App.tsx                 # Root component
+│   ├── App.tsx                 # The root component
 │   └── main.tsx                # Entry point
 ├── package.json
 ├── vite.config.ts              # Vite configuration
@@ -77,45 +76,47 @@ frontend/
 ## Key Components
 
 ### CircuitCanvas
-The main design area where users build genetic circuits. Features:
+This is the main design area - it's where you build your genetic circuits. It handles:
 - Drag-and-drop component placement
-- DNA sequence visualization (abstract and detailed views)
+- DNA sequence visualization (both abstract and detailed views)
 - Interactive selection and editing
 - Zoom and pan controls
 - Operon highlighting
 
 ### ComponentLibrary
-Sidebar panel containing draggable biological components:
-- Categorized by type (Promoters, Genes, RBS, Terminators)
+The sidebar panel with all the draggable biological components:
+- Organized by type (Promoters, Genes, RBS, Terminators)
 - Custom promoter creation dialog
-- Gene classification (Reporters, Activators, Repressors)
+- Genes classified by function (Reporters, Activators, Repressors)
 
 ### ResultsPanel
-Displays simulation results:
+Where all your simulation results show up:
 - Time-series plots for mRNA and proteins
-- Summary tables
+- Summary tables with final values
 - Flow cytometry histograms
-- Export functionality
+- Export functionality so you can save your results
 
 ### DNASequenceRenderer
-Renders the DNA strand visualization:
-- Base-pair level detail in DNA view
-- Abstract component blocks in parts view
-- Interactive cursor and selection
-- Component overlays
+This renders the actual DNA strand visualization:
+- Shows base-pair level detail in DNA view
+- Shows abstract component blocks in parts view
+- Interactive cursor and selection highlighting
+- Component overlays so you can see what's where
 
 ## Tech Stack
 
-- **React 18** - UI framework
-- **TypeScript** - Type safety
-- **Vite** - Build tool and dev server
-- **react-dnd** - Drag and drop functionality
-- **Plotly.js** - Data visualization
-- **CSS Modules** - Component styling
-
+- **React 18** - The UI framework (it's pretty great)
+- **TypeScript** - Type safety makes everything better
+- **Vite** - Super fast build tool and dev server
+- **react-dnd** - Handles all the drag and drop functionality
+- **Plotly.js** - Makes those beautiful interactive charts
+- **CSS Modules** - Component styling that doesn't leak
 
 ## Browser Support
 
-- Chrome/Edge (latest)
-- Firefox (latest)
-- Safari (latest)
+We support the latest versions of:
+- Chrome/Edge
+- Firefox
+- Safari
+
+Basically, if it's a modern browser, it should work!
