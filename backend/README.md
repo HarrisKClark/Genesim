@@ -30,18 +30,18 @@ This is the backend API for Genesim - it's where all the simulation magic happen
   - Promoters can be repressed by inhibitors
   - Promoters can be activated by activators
   - You can tweak the cooperativity (Hill coefficient) to match your system
-- **Polycistronic mRNA**: One mRNA can make multiple proteins - because operons are cool
+- **Polycistronic mRNA**: One mRNA can make multiple proteins
 
 ## Getting Started
 
 ### What You Need
 
-- **Python** 3.8 or higher (we're not picky, but newer is better)
-- **pip** or **conda** (whatever you prefer)
+- **Python** 3.8 or higher
+- **pip** or **conda**
 
 ### Setup
 
-1. **Create a virtual environment** (seriously, do this - it'll save you headaches):
+1. **Create a virtual environment**:
    ```bash
    python -m venv .venv
    source .venv/bin/activate  # On Windows: .venv\Scripts\activate
@@ -54,7 +54,7 @@ This is the backend API for Genesim - it's where all the simulation magic happen
 
 ### Running the Server
 
-**Development mode** (auto-reloads when you change code - super handy):
+**Development mode** (auto-reloads when you change code):
 ```bash
 uvicorn app.main:app --reload --port 8000
 ```
@@ -66,7 +66,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 Once it's running, you can access:
 - API: http://localhost:8000
-- Interactive docs: http://localhost:8000/docs (this is really cool - check it out!)
+- Interactive docs: http://localhost:8000/docs
 - Alternative docs: http://localhost:8000/redoc
 
 ## API Endpoints
@@ -133,7 +133,7 @@ This is the main endpoint - it simulates one or more genetic transcripts (operon
   - `inhibitorName`: Name of the repressor protein (optional - leave null if you don't need it)
   - `hillK`: Half-maximal concentration for the Hill function
   - `hillN`: Cooperativity (how steep the response is)
-  - `leak`: Basal promoter activity (because nothing is perfect)
+  - `leak`: Basal promoter activity
   - `activatorName`: Name of activator protein (optional)
   - `actK`, `actN`: Activation Hill parameters (optional)
 - `params`:
@@ -201,7 +201,7 @@ backend/
 
 ## Dependencies
 
-- **fastapi**: The web framework (it's really fast, hence the name)
+- **fastapi**: The web framework
 - **uvicorn**: The ASGI server that runs everything
 - **pydantic**: Makes sure your data is valid before we even look at it
 - **numpy**: Does all the number crunching
@@ -248,15 +248,15 @@ The stochastic simulation uses the Gillespie SSA to model discrete molecular eve
 - Translation events (protein production)
 - Degradation events (mRNA/protein decay)
 
-It's basically a fancy way of saying "we model each molecule individually and account for randomness."
+The algorithm models each molecule individually and accounts for randomness.
 
 ## Error Handling
 
-We try to be helpful when things go wrong. The API returns appropriate HTTP status codes:
+The API returns appropriate HTTP status codes:
 - `200`: Everything worked perfectly
-- `400`: Bad request (you sent us something weird)
+- `400`: Bad request
 - `422`: Validation error (Pydantic caught something wrong with your data)
-- `500`: Something broke on our end (sorry!)
+- `500`: Internal server error
 
 Error responses include a message explaining what went wrong:
 ```json

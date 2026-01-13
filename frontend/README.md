@@ -7,7 +7,7 @@ This is the frontend for Genesim - the part you actually see and interact with! 
 ### Circuit Design
 - **Two Ways to View**: 
   - Abstract view: See your biological parts as nice visual blocks
-  - DNA view: Zoom in and see every single base pair (it's pretty detailed)
+  - DNA view: Zoom in and see every single base pair
 - **Interactive Canvas**: 
   - Drag and drop components right onto the DNA strand
   - Click and drag to select DNA regions for editing
@@ -105,7 +105,7 @@ This renders the actual DNA strand visualization:
 
 ## Tech Stack
 
-- **React 18** - The UI framework (it's pretty great)
+- **React 18** - The UI framework
 - **TypeScript** - Type safety makes everything better
 - **Vite** - Super fast build tool and dev server
 - **react-dnd** - Handles all the drag and drop functionality
@@ -119,4 +119,4 @@ We support the latest versions of:
 - Firefox
 - Safari
 
-Basically, if it's a modern browser, it should work!
+Modern browsers are supported.

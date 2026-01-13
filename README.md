@@ -25,24 +25,24 @@ Hey there! 👋 Welcome to Genesim, a web-based platform that lets you design an
 - **Stochastic Simulation**: Uses the Gillespie algorithm to account for the randomness that happens in real cells
 - **Flow Cytometry**: Run a bunch of stochastic simulations to see how a population of cells would behave
 - **Hill Function Regulation**: Promoters can be turned on or off based on inhibitor/activator concentrations - just like in real biology
-- **Polycistronic mRNA**: Build operons that make multiple proteins from one mRNA - because biology is efficient like that
+- **Polycistronic mRNA**: Build operons that make multiple proteins from one mRNA
 
 ### The Interface
 - **Two Ways to View**: Switch between seeing the big picture (parts) or zooming in to see every base pair
-- **Interactive Selection**: Click and drag to select DNA regions - it's pretty satisfying, honestly
+- **Interactive Selection**: Click and drag to select DNA regions
 - **Beautiful Charts**: Results show up as interactive Plotly charts so you can see how mRNA and proteins change over time
 - **Export Your Work**: Save your simulation results and circuit designs for later
 
 ## What's Under the Hood?
 
 ### Frontend
-- **React 18** with TypeScript (because type safety is your friend)
+- **React 18** with TypeScript
 - **Vite** for lightning-fast development
 - **Plotly.js** for those gorgeous interactive charts
 - **react-dnd** for the drag-and-drop magic
 
 ### Backend
-- **FastAPI** - it's fast, it's modern, we love it
+- **FastAPI**
 - **NumPy** for all the number crunching
 - **SciPy** for the heavy-duty scientific computing
 - **Pydantic** to make sure your data is valid before we even touch it
@@ -81,9 +81,9 @@ We'd love to have you! Feel free to submit a Pull Request. If you're planning so
 
 ## Thanks & Credits
 
-- Built with [FastAPI](https://fastapi.tiangolo.com/) - seriously, it's amazing
-- Charts powered by [Plotly.js](https://plotly.com/javascript/) - they make everything look good
-- UI built with [React](https://react.dev/) - because it just works
+- Built with [FastAPI](https://fastapi.tiangolo.com/)
+- Charts powered by [Plotly.js](https://plotly.com/javascript/)
+- UI built with [React](https://react.dev/)
 
 ## Need Help?
 
